@@ -630,6 +630,32 @@ button:disabled {
   padding: 8px 10px;
   color: #ddd6fe;
   font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.queue-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.queue-toolbar label {
+  flex: 1;
+}
+
+.queue-toolbar select {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #08090e;
+  color: var(--text);
+}
+
+.calendar-day.selected {
+  border-color: var(--purple-strong);
+  background: rgba(139, 92, 246, 0.2);
 }
 
 .calendar-muted {
@@ -640,6 +666,32 @@ button:disabled {
 .queue-cards {
   display: grid;
   gap: 10px;
+}
+
+.calendar-day-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.calendar-day-heading {
+  color: #d8b4fe;
+  font-weight: 700;
+}
+
+.calendar-post {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 4px 12px;
+  padding: 12px;
+  border-left: 2px solid var(--purple);
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.calendar-post small {
+  grid-column: 2;
+  color: var(--muted);
 }
 
 .queue-card {

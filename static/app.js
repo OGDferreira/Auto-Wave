@@ -14,10 +14,15 @@ const scheduleAccount = document.getElementById('schedule-account');
 const queueList = document.getElementById('fila-list');
 const queueCount = document.getElementById('queue-count');
 const calendarStrip = document.getElementById('calendar-strip');
+const calendarDayList = document.getElementById('calendar-day-list');
+const queueAccountFilter = document.getElementById('queue-account-filter');
+const queueAllButton = document.getElementById('queue-all-button');
 const logOutput = document.getElementById('log-output');
 let accountsCache = [];
 let accountPollingTimer;
 let logsPollingTimer;
+let queuePostsCache = [];
+let queueSelectedDay = null;
 
 function showPage(pageId) {
   const targetPage = document.getElementById(`page-${pageId}`);
@@ -210,6 +215,10 @@ async function loadAccounts() {
     const accounts = await fetchJson('/api/contas');
     accountsCache = accounts;
     renderAccounts(accounts);
+    if (queueAccountFilter) {
+      queueAccountFilter.innerHTML = '<option value="all">Todas as contas</option>' +
+        accounts.map((account) => `<option value="${account.id}">${account.username}</option>`).join('');
+    }
     if (scheduleAccount) {
       scheduleAccount.innerHTML = accounts.length
         ? accounts.map((account) => `<option value="${account.id}">${account.username} · ${account.status}</option>`).join('')
@@ -221,11 +230,16 @@ async function loadAccounts() {
 
   function renderQueue(posts) {
     if (!queueList) return;
+    queuePostsCache = posts;
+    const filterValue = queueAccountFilter?.value || 'all';
+    const visiblePosts = filterValue === 'all'
+      ? posts
+      : posts.filter((post) => String(post.account_id) === filterValue);
     queueCount.textContent = `${posts.length} ${posts.length === 1 ? 'item' : 'itens'}`;
-    if (!posts.length) {
+    if (!visiblePosts.length) {
       queueList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">◷</div><strong>Fila vazia</strong><span>Agende sua primeira publicação para começar.</span></div>';
     } else {
-      queueList.innerHTML = posts.map((post) => {
+      queueList.innerHTML = visiblePosts.map((post) => {
         const date = new Date(post.scheduled_for);
         const account = accountsCache.find((item) => item.id === post.account_id);
         return `<article class="queue-card"><div class="queue-thumb">▧</div><div class="queue-card-body"><strong>${account?.username || `Conta #${post.account_id}`}</strong><span>${date.toLocaleString('pt-BR')}</span><small>${post.caption || 'Sem legenda'}</small></div><span class="status-chip">${post.status}</span><button class="queue-delete" data-post-id="${post.id}" type="button">×</button></article>`;
@@ -238,8 +252,23 @@ async function loadAccounts() {
         });
       });
     }
-    const days = [...new Set(posts.map((post) => new Date(post.scheduled_for).toLocaleDateString('pt-BR')))];
-    calendarStrip.innerHTML = days.length ? days.map((day) => `<span class="calendar-day">${day}</span>`).join('') : '<span class="calendar-day calendar-muted">Nenhum dia agendado</span>';
+    const days = [...new Set(visiblePosts.map((post) => new Date(post.scheduled_for).toISOString().slice(0, 10)))];
+    calendarStrip.innerHTML = days.length
+      ? days.map((day) => `<button class="calendar-day ${queueSelectedDay === day ? 'selected' : ''}" data-day="${day}" type="button">${new Date(`${day}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', weekday: 'short' })}</button>`).join('')
+      : '<span class="calendar-day calendar-muted">Nenhum dia agendado</span>';
+    calendarStrip.querySelectorAll('[data-day]').forEach((button) => {
+      button.addEventListener('click', () => {
+        queueSelectedDay = queueSelectedDay === button.dataset.day ? null : button.dataset.day;
+        renderQueue(queuePostsCache);
+      });
+    });
+    const dayPosts = queueSelectedDay
+      ? visiblePosts.filter((post) => new Date(post.scheduled_for).toISOString().slice(0, 10) === queueSelectedDay)
+      : [];
+    calendarDayList.innerHTML = dayPosts.length
+      ? `<div class="calendar-day-heading">Publicações de ${new Date(`${queueSelectedDay}T12:00:00`).toLocaleDateString('pt-BR')}</div>` +
+        dayPosts.map((post) => `<div class="calendar-post"><strong>${new Date(post.scheduled_for).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong><span>${accountsCache.find((account) => account.id === post.account_id)?.username || 'Conta'}</span><small>${post.caption || post.media_url}</small></div>`).join('')
+      : '';
   }
 
   async function loadQueue() {
@@ -249,6 +278,16 @@ async function loadAccounts() {
     } catch (error) {
       notify('Não foi possível carregar a fila.', 'error');
     }
+
+    queueAccountFilter?.addEventListener('change', () => {
+      queueSelectedDay = null;
+      renderQueue(queuePostsCache);
+    });
+    queueAllButton?.addEventListener('click', () => {
+      queueAccountFilter.value = 'all';
+      queueSelectedDay = null;
+      renderQueue(queuePostsCache);
+    });
   }
 
   scheduleForm?.addEventListener('submit', async (event) => {
