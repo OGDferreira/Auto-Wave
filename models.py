@@ -69,6 +69,7 @@ def build_database_url() -> tuple[str, dict]:
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
         query.pop("sslmode", None)
         query.pop("channel_binding", None)
+        is_transaction_pooler = parsed.port == 6543 or query.pop("pgbouncer", "").lower() == "true"
         database_url = urlunsplit(
             (
                 "postgresql+asyncpg",
@@ -78,11 +79,15 @@ def build_database_url() -> tuple[str, dict]:
                 parsed.fragment,
             )
         )
-        return database_url, {
+        connect_args = {
             "family": socket.AF_INET,
             "ssl": "require",
             "timeout": 15,
         }
+        if is_transaction_pooler:
+            connect_args["statement_cache_size"] = 0
+            connect_args["prepared_statement_cache_size"] = 0
+        return database_url, connect_args
 
     return configured_url, {}
 
