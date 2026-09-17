@@ -1,4 +1,5 @@
 import os
+import socket
 from datetime import datetime
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -77,7 +78,11 @@ def build_database_url() -> tuple[str, dict]:
                 parsed.fragment,
             )
         )
-        return database_url, {"ssl": "require", "timeout": 15}
+        return database_url, {
+            "family": socket.AF_INET,
+            "ssl": "require",
+            "timeout": 15,
+        }
 
     return configured_url, {}
 
