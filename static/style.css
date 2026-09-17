@@ -426,6 +426,7 @@ code {
   padding: 18px;
   border-left-width: 4px;
   border-left-style: solid;
+  overflow: hidden;
 }
 
 .account-card[data-status="conectada"] {
@@ -445,17 +446,42 @@ code {
 
 .account-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  justify-content: flex-start;
   margin-bottom: 12px;
+}
+
+.account-avatar {
+  display: grid;
+  flex: 0 0 46px;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2d1550, #111827);
+  color: #e9d5ff;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.account-identity {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
 }
 
 .account-header h4 {
   margin: 0;
   font-size: 1.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-status {
+  color: var(--muted);
   font-size: 0.76rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -465,6 +491,11 @@ code {
 .account-card p {
   margin: 8px 0;
   color: var(--muted);
+}
+
+.account-card .account-metrics {
+  color: #ddd6fe;
+  font-size: 0.82rem;
 }
 
 .account-card button {
@@ -602,6 +633,74 @@ button:disabled {
   margin-top: 5px;
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.media-importer {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(168, 85, 247, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(139, 92, 246, 0.08), rgba(8, 8, 14, 0.7));
+}
+
+.media-importer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.media-importer-head small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.media-dropzone {
+  display: grid;
+  min-height: 104px;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  border: 1px dashed rgba(168, 85, 247, 0.6);
+  border-radius: 12px;
+  background: rgba(5, 5, 5, 0.45);
+  color: #d8b4fe;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.media-dropzone:hover,
+.media-dropzone:focus-within {
+  border-color: var(--purple-strong);
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.media-dropzone span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.media-dropzone input {
+  display: none;
+}
+
+.media-upload-status {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.media-upload-status.is-success {
+  color: #bbf7d0;
+}
+
+.media-upload-status.is-error {
+  color: #fecaca;
 }
 
 .media-preview {

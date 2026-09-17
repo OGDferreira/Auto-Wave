@@ -191,7 +191,16 @@
                 <h3>Postagem programada</h3>
               </div>
               <label><span>Conta de destino</span><select id="schedule-account" required></select></label>
-              <label class="media-field"><span>URL da mídia</span><input id="schedule-media" type="url" placeholder="Cole o link da imagem ou vídeo..." required /><small>Use uma URL pública para a mídia que será publicada.</small></label>
+              <div class="media-importer">
+                <div class="media-importer-head"><span>Importar mídia</span><small>Imagem ou vídeo, até 100 MB</small></div>
+                <label class="media-dropzone" for="schedule-file">
+                  <strong>＋ Escolher arquivo</strong>
+                  <span>ou arraste sua mídia para este espaço</span>
+                  <input id="schedule-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" />
+                </label>
+                <div id="media-upload-status" class="media-upload-status" role="status"></div>
+              </div>
+              <label class="media-field"><span>URL da mídia</span><input id="schedule-media" type="url" placeholder="A URL aparecerá após o upload..." required /><small>Você também pode colar uma URL de mídia.</small></label>
               <div id="media-preview" class="media-preview"><span>Pré-visualização da mídia</span></div>
               <label><span>Legenda</span><textarea id="schedule-caption" rows="5" placeholder="Escreva uma legenda para a publicação"></textarea></label>
               <label><span>Data e horário</span><input id="schedule-date" type="datetime-local" required /></label>
@@ -230,6 +239,6 @@
       window.__INITIAL_METRICS__ = {{ initial_metrics | tojson }};
       window.__INITIAL_PAGE__ = 'dashboard';
     </script>
-    <script src="/static/app.js?v=20260917-4"></script>
+    <script src="/static/app.js?v=20260917-5"></script>
   </body>
 </html>

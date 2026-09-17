@@ -12,6 +12,8 @@ const toastRegion = document.getElementById('toast-region');
 const scheduleForm = document.getElementById('schedule-form');
 const scheduleAccount = document.getElementById('schedule-account');
 const scheduleMedia = document.getElementById('schedule-media');
+const scheduleFile = document.getElementById('schedule-file');
+const mediaUploadStatus = document.getElementById('media-upload-status');
 const mediaPreview = document.getElementById('media-preview');
 const queueList = document.getElementById('fila-list');
 const queueCount = document.getElementById('queue-count');
@@ -143,26 +145,25 @@ async function loadMetrics() {
     console.error('Erro ao carregar métricas', error);
   }
 
-  async function loadLogs() {
-    if (!logOutput) {
-      return;
-    }
-    try {
-      const payload = await fetchJson('/api/logs');
-      logOutput.textContent = payload.logs.length
-        ? payload.logs.join('\n')
-        : 'O Render não retornou registros recentes.';
-      logOutput.scrollTop = logOutput.scrollHeight;
-    } catch (error) {
-      logOutput.textContent = error.message || 'Não foi possível carregar os logs do Render.';
-    }
-  }
+}
 
-  function startLogsPolling() {
-    window.clearInterval(logsPollingTimer);
-    loadLogs();
-    logsPollingTimer = window.setInterval(loadLogs, 5000);
+async function loadLogs() {
+  if (!logOutput) return;
+  try {
+    const payload = await fetchJson('/api/logs');
+    logOutput.textContent = payload.logs?.length
+      ? payload.logs.join('\n')
+      : 'O Render não retornou registros recentes.';
+    logOutput.scrollTop = logOutput.scrollHeight;
+  } catch (error) {
+    logOutput.textContent = error.message || 'Não foi possível carregar os logs do Render.';
   }
+}
+
+function startLogsPolling() {
+  window.clearInterval(logsPollingTimer);
+  loadLogs();
+  logsPollingTimer = window.setInterval(loadLogs, 5000);
 }
 
 async function loadConfig() {
@@ -199,23 +200,32 @@ function renderAccounts(accounts) {
 
   accounts.forEach((account) => {
     const card = document.createElement('article');
-    card.className = 'account-card';
+    card.className = 'account-card legacy-inspired';
     card.dataset.status = account.status || 'pendente';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'account-avatar';
+    avatar.textContent = (account.username || '?').replace(/^@/, '').slice(0, 1).toUpperCase();
 
     const header = document.createElement('div');
     header.className = 'account-header';
+    header.appendChild(avatar);
+    const identity = document.createElement('div');
+    identity.className = 'account-identity';
     const title = document.createElement('h4');
-    title.textContent = account.username;
+    title.textContent = `@${String(account.username).replace(/^@/, '')}`;
     const status = document.createElement('span');
     status.className = 'account-status';
-    status.textContent = account.status;
-    header.append(title, status);
+    status.textContent = account.status === 'conectada' ? 'Conectada' : account.status === 'suspensa' ? 'Suspensa' : 'Pendente';
+    identity.append(title, status);
+    header.appendChild(identity);
 
     const metaToken = document.createElement('p');
     metaToken.textContent = account.meta_access_token ? 'Meta token ativo' : 'Meta token pendente';
 
     const details = document.createElement('p');
-    details.textContent = `Views: ${account.views_count || 0} · Leads: ${account.leads_count || 0}`;
+    details.className = 'account-metrics';
+    details.textContent = `${Number(account.views_count || 0).toLocaleString('pt-BR')} visualizações · ${Number(account.leads_count || 0).toLocaleString('pt-BR')} leads`;
 
     const action = document.createElement('button');
     action.className = 'account-connect-btn';
@@ -242,6 +252,27 @@ async function loadAccounts() {
       queueAccountFilter.innerHTML = '<option value="all">Todas as contas</option>' +
         accounts.map((account) => `<option value="${account.id}">${account.username}</option>`).join('');
     }
+
+    scheduleFile?.addEventListener('change', async () => {
+      const file = scheduleFile.files?.[0];
+      if (!file) return;
+      mediaUploadStatus.textContent = 'Enviando mídia para o Storage…';
+      mediaUploadStatus.className = 'media-upload-status is-loading';
+      try {
+        const formData = new FormData();
+        formData.append('media', file);
+        const response = await fetch('/api/media/upload', { method: 'POST', body: formData });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || 'Não foi possível enviar a mídia.');
+        scheduleMedia.value = payload.url;
+        scheduleMedia.dispatchEvent(new Event('input'));
+        mediaUploadStatus.textContent = `${file.name} importado com sucesso.`;
+        mediaUploadStatus.className = 'media-upload-status is-success';
+      } catch (error) {
+        mediaUploadStatus.textContent = error.message || 'Falha ao importar a mídia.';
+        mediaUploadStatus.className = 'media-upload-status is-error';
+      }
+    });
     if (scheduleAccount) {
       scheduleAccount.innerHTML = accounts.length
         ? accounts.map((account) => `<option value="${account.id}">${account.username} · ${account.status}</option>`).join('')
@@ -366,26 +397,27 @@ configForm?.addEventListener('submit', async (event) => {
       body: JSON.stringify(body),
     });
 
-    collaboratorForm?.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      try {
-        await fetchJson('/api/auth/collaborators', {
-          method: 'POST',
-          body: JSON.stringify({
-            username: document.getElementById('collaborator-username').value,
-            password: document.getElementById('collaborator-password').value,
-          }),
-        });
-        collaboratorForm.reset();
-        notify('Colaborador criado com sucesso.', 'success');
-      } catch (error) {
-        notify(error.message || 'Não foi possível criar o colaborador.', 'error');
-      }
-    });
     notify('Configuração salva com sucesso.', 'success');
   } catch (error) {
     console.error(error);
     notify(error.message || 'Erro ao salvar as chaves.', 'error');
+  }
+});
+
+collaboratorForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    await fetchJson('/api/auth/collaborators', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: document.getElementById('collaborator-username').value,
+        password: document.getElementById('collaborator-password').value,
+      }),
+    });
+    collaboratorForm.reset();
+    notify('Colaborador criado com sucesso.', 'success');
+  } catch (error) {
+    notify(error.message || 'Não foi possível criar o colaborador.', 'error');
   }
 });
 

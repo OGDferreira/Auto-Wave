@@ -10,11 +10,14 @@ import base64
 import binascii
 from collections import deque
 from datetime import datetime
+from mimetypes import guess_type
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
+from uuid import uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.responses import PlainTextResponse
@@ -24,6 +27,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import create_client
 
 from models import (
     Account,
@@ -112,6 +116,10 @@ class SchedulePayload(BaseModel):
     media_url: str
     caption: str = ""
     scheduled_for: datetime
+
+
+MAX_MEDIA_SIZE = 100 * 1024 * 1024
+MEDIA_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "midias").strip() or "midias"
 
 
 class LoginPayload(BaseModel):
@@ -226,6 +234,53 @@ async def get_or_create_system_config(db: AsyncSession, owner_id: int | None = N
         await db.commit()
         await db.refresh(config)
     return config
+
+
+@app.post("/api/media/upload")
+async def upload_media(
+    request: Request,
+    media: UploadFile = File(...),
+    db: AsyncSession = Depends(session_dependency),
+):
+    user = await require_user(request, db)
+    content_type = (media.content_type or "").lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/quicktime", "video/webm"}:
+        await media.close()
+        raise HTTPException(status_code=415, detail="Envie uma imagem ou vídeo compatível.")
+    content = await media.read(MAX_MEDIA_SIZE + 1)
+    await media.close()
+    if len(content) > MAX_MEDIA_SIZE:
+        raise HTTPException(status_code=413, detail="A mídia excede o limite de 100 MB.")
+
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=503, detail="Supabase Storage não configurado no Render.")
+
+    extension = Path(media.filename or "").suffix.lower() or (guess_type(media.filename or "")[0] or "").split("/")[-1]
+    path = f"{owner_id_for(user)}/{uuid4().hex}{extension if extension.startswith('.') else ''}"
+
+    def store() -> str:
+        client = create_client(supabase_url, service_key)
+        client.storage.from_(MEDIA_BUCKET).upload(
+            path,
+            content,
+            file_options={"content-type": content_type, "upsert": False},
+        )
+        signed = client.storage.from_(MEDIA_BUCKET).create_signed_url(path, 60 * 60 * 24 * 7)
+        if isinstance(signed, dict):
+            nested = signed.get("data") if isinstance(signed.get("data"), dict) else {}
+            return str(signed.get("signedURL") or signed.get("signedUrl") or nested.get("signedUrl") or "")
+        return str(signed or "")
+
+    try:
+        media_url = await asyncio.to_thread(store)
+    except Exception as exc:
+        logger.exception("Falha ao enviar mídia para o Supabase Storage")
+        raise HTTPException(status_code=502, detail=f"Falha no Storage: {str(exc)[:240]}") from exc
+    if not media_url:
+        raise HTTPException(status_code=502, detail="O Storage não retornou uma URL assinada.")
+    return {"url": media_url, "media_type": "VIDEO" if content_type.startswith("video/") else "IMAGE", "filename": media.filename or "mídia"}
 
 
 async def get_dashboard_metrics(db: AsyncSession) -> dict[str, Any]:
@@ -749,8 +804,11 @@ async def importar_contas(request: Request, db: AsyncSession = Depends(session_d
 
 
 @app.get("/api/fila")
-async def list_scheduled_posts(db: AsyncSession = Depends(session_dependency)):
-    rows = (await db.execute(select(ScheduledPost).order_by(ScheduledPost.scheduled_for.asc()))).scalars().all()
+async def list_scheduled_posts(request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await require_user(request, db)
+    owner_id = owner_id_for(user)
+    account_ids = select(Account.id).where(Account.owner_id == owner_id)
+    rows = (await db.execute(select(ScheduledPost).where(ScheduledPost.account_id.in_(account_ids)).order_by(ScheduledPost.scheduled_for.asc()))).scalars().all()
     return [
         {
             "id": row.id,
@@ -765,8 +823,9 @@ async def list_scheduled_posts(db: AsyncSession = Depends(session_dependency)):
 
 
 @app.post("/api/fila/agendar")
-async def schedule_post(payload: SchedulePayload, db: AsyncSession = Depends(session_dependency)):
-    account = await db.get(Account, payload.account_id)
+async def schedule_post(payload: SchedulePayload, request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await require_user(request, db)
+    account = await db.scalar(select(Account).where(Account.id == payload.account_id, Account.owner_id == owner_id_for(user)))
     if account is None:
         raise HTTPException(status_code=404, detail="Conta não encontrada")
     if not payload.media_url.strip():
@@ -785,8 +844,10 @@ async def schedule_post(payload: SchedulePayload, db: AsyncSession = Depends(ses
 
 
 @app.delete("/api/fila/{post_id}")
-async def delete_scheduled_post(post_id: int, db: AsyncSession = Depends(session_dependency)):
-    post = await db.get(ScheduledPost, post_id)
+async def delete_scheduled_post(post_id: int, request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await require_user(request, db)
+    account_ids = select(Account.id).where(Account.owner_id == owner_id_for(user))
+    post = await db.scalar(select(ScheduledPost).where(ScheduledPost.id == post_id, ScheduledPost.account_id.in_(account_ids)))
     if post is None:
         raise HTTPException(status_code=404, detail="Post não encontrado")
     await db.delete(post)
