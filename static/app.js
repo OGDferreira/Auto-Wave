@@ -7,6 +7,12 @@ const contasList = document.getElementById('contas-list');
 const refreshAccountsButton = document.getElementById('refresh-accounts');
 const connectFirstAccountButton = document.getElementById('connect-first-account');
 const toastRegion = document.getElementById('toast-region');
+const scheduleForm = document.getElementById('schedule-form');
+const scheduleAccount = document.getElementById('schedule-account');
+const queueList = document.getElementById('fila-list');
+const queueCount = document.getElementById('queue-count');
+const calendarStrip = document.getElementById('calendar-strip');
+const logOutput = document.getElementById('log-output');
 let accountsCache = [];
 let accountPollingTimer;
 
@@ -188,9 +194,66 @@ async function loadAccounts() {
     const accounts = await fetchJson('/api/contas');
     accountsCache = accounts;
     renderAccounts(accounts);
+    if (scheduleAccount) {
+      scheduleAccount.innerHTML = accounts.length
+        ? accounts.map((account) => `<option value="${account.id}">${account.username} · ${account.status}</option>`).join('')
+        : '<option value="">Nenhuma conta disponível</option>';
+    }
   } catch (error) {
     notify('Não foi possível carregar as contas. Verifique o banco de dados.', 'error');
   }
+
+  function renderQueue(posts) {
+    if (!queueList) return;
+    queueCount.textContent = `${posts.length} ${posts.length === 1 ? 'item' : 'itens'}`;
+    if (!posts.length) {
+      queueList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">◷</div><strong>Fila vazia</strong><span>Agende sua primeira publicação para começar.</span></div>';
+    } else {
+      queueList.innerHTML = posts.map((post) => {
+        const date = new Date(post.scheduled_for);
+        const account = accountsCache.find((item) => item.id === post.account_id);
+        return `<article class="queue-card"><div class="queue-thumb">▧</div><div class="queue-card-body"><strong>${account?.username || `Conta #${post.account_id}`}</strong><span>${date.toLocaleString('pt-BR')}</span><small>${post.caption || 'Sem legenda'}</small></div><span class="status-chip">${post.status}</span><button class="queue-delete" data-post-id="${post.id}" type="button">×</button></article>`;
+      }).join('');
+      queueList.querySelectorAll('.queue-delete').forEach((button) => {
+        button.addEventListener('click', async () => {
+          await fetchJson(`/api/fila/${button.dataset.postId}`, { method: 'DELETE' });
+          notify('Publicação removida da fila.', 'success');
+          loadQueue();
+        });
+      });
+    }
+    const days = [...new Set(posts.map((post) => new Date(post.scheduled_for).toLocaleDateString('pt-BR')))];
+    calendarStrip.innerHTML = days.length ? days.map((day) => `<span class="calendar-day">${day}</span>`).join('') : '<span class="calendar-day calendar-muted">Nenhum dia agendado</span>';
+  }
+
+  async function loadQueue() {
+    try {
+      const posts = await fetchJson('/api/fila');
+      renderQueue(posts);
+    } catch (error) {
+      notify('Não foi possível carregar a fila.', 'error');
+    }
+  }
+
+  scheduleForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await fetchJson('/api/fila/agendar', {
+        method: 'POST',
+        body: JSON.stringify({
+          account_id: Number(scheduleAccount.value),
+          media_url: document.getElementById('schedule-media').value,
+          caption: document.getElementById('schedule-caption').value,
+          scheduled_for: new Date(document.getElementById('schedule-date').value).toISOString(),
+        }),
+      });
+      scheduleForm.reset();
+      notify('Publicação adicionada à fila.', 'success');
+      loadQueue();
+    } catch (error) {
+      notify('Preencha conta, mídia e horário corretamente.', 'error');
+    }
+  });
 }
 
 function startAccountPolling() {
@@ -343,4 +406,5 @@ showPage(savedPage);
 loadMetrics();
 loadConfig();
 loadAccounts();
+loadQueue();
 registerServiceWorker();

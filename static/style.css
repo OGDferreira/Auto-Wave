@@ -369,6 +369,21 @@ code {
   padding: 12px 14px;
 }
 
+.config-form small {
+  color: #c4b5fd;
+  font-weight: 400;
+}
+
+.config-help {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--purple);
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
 .accounts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -526,6 +541,150 @@ button:disabled {
   flex-direction: column;
 }
 
+.scheduler-layout,
+.logs-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: 18px;
+}
+
+.scheduler-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.scheduler-form input,
+.scheduler-form select,
+.scheduler-form textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0b0b10;
+  color: var(--text);
+  padding: 11px 12px;
+}
+
+.queue-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.count-badge,
+.status-chip,
+.live-badge {
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.12);
+  font-size: 0.75rem;
+}
+
+.live-badge {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.calendar-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.calendar-day {
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #ddd6fe;
+  font-size: 0.78rem;
+}
+
+.calendar-muted {
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.queue-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.queue-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  animation: page-in 0.3s ease both;
+}
+
+.queue-thumb {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  color: #c4b5fd;
+  background: linear-gradient(135deg, #24113d, #111827);
+  font-size: 1.5rem;
+}
+
+.queue-card-body {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+}
+
+.queue-card-body span,
+.queue-card-body small {
+  color: var(--muted);
+}
+
+.queue-delete {
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 8px;
+  background: transparent;
+  color: #fca5a5;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.system-card {
+  min-height: 240px;
+}
+
+.system-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.system-row strong {
+  color: var(--text);
+}
+
+.log-panel pre {
+  overflow: auto;
+  min-height: 260px;
+  max-height: 420px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #08090e;
+  color: #c4b5fd;
+  font: 0.76rem/1.7 Consolas, monospace;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     flex-direction: column;
@@ -541,7 +700,9 @@ button:disabled {
 
   .stats-grid,
   .content-grid,
-  .field-grid {
+  .field-grid,
+  .scheduler-layout,
+  .logs-layout {
     grid-template-columns: 1fr;
   }
 

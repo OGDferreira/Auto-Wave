@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -18,6 +19,7 @@ from models import (
     Account,
     AsyncSessionLocal,
     PushSubscription,
+    ScheduledPost,
     SharkbotEvent,
     SystemConfig,
     init_db,
@@ -46,6 +48,13 @@ class ConfigPayload(BaseModel):
     meta_webhook_verify_token: str = ""
     vapid_public_key: str = ""
     vapid_private_key: str = ""
+
+
+class SchedulePayload(BaseModel):
+    account_id: int
+    media_url: str
+    caption: str = ""
+    scheduled_for: datetime
 
 
 async def get_or_create_system_config(db: AsyncSession) -> SystemConfig:
@@ -243,10 +252,22 @@ async def list_accounts(db: AsyncSession = Depends(session_dependency)):
 @app.post("/contas/importar")
 async def importar_contas(request: Request, db: AsyncSession = Depends(session_dependency)):
     try:
-        form_data = await request.form()
-        content = str(form_data.get("contas", ""))
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            payload = await request.json()
+            content = str(payload.get("contas", ""))
+        elif "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+            form_data = await request.form()
+            content = str(form_data.get("contas", ""))
+        else:
+            content = (await request.body()).decode("utf-8", errors="ignore")
     except Exception:
         content = (await request.body()).decode("utf-8", errors="ignore")
+
+    if "contas=" in content:
+        from urllib.parse import parse_qs
+
+        content = parse_qs(content).get("contas", [content])[0]
 
     created = 0
     for line in content.splitlines():
@@ -267,6 +288,52 @@ async def importar_contas(request: Request, db: AsyncSession = Depends(session_d
 
     await db.commit()
     return {"status": "ok", "created": created}
+
+
+@app.get("/api/fila")
+async def list_scheduled_posts(db: AsyncSession = Depends(session_dependency)):
+    rows = (await db.execute(select(ScheduledPost).order_by(ScheduledPost.scheduled_for.asc()))).scalars().all()
+    return [
+        {
+            "id": row.id,
+            "account_id": row.account_id,
+            "media_url": row.media_url,
+            "caption": row.caption,
+            "scheduled_for": row.scheduled_for.isoformat(),
+            "status": row.status,
+        }
+        for row in rows
+    ]
+
+
+@app.post("/api/fila/agendar")
+async def schedule_post(payload: SchedulePayload, db: AsyncSession = Depends(session_dependency)):
+    account = await db.get(Account, payload.account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    if not payload.media_url.strip():
+        raise HTTPException(status_code=400, detail="Informe a URL da mídia")
+
+    post = ScheduledPost(
+        account_id=payload.account_id,
+        media_url=payload.media_url.strip(),
+        caption=payload.caption.strip(),
+        scheduled_for=payload.scheduled_for,
+    )
+    db.add(post)
+    await db.commit()
+    await db.refresh(post)
+    return {"status": "ok", "id": post.id}
+
+
+@app.delete("/api/fila/{post_id}")
+async def delete_scheduled_post(post_id: int, db: AsyncSession = Depends(session_dependency)):
+    post = await db.get(ScheduledPost, post_id)
+    if post is None:
+        raise HTTPException(status_code=404, detail="Post não encontrado")
+    await db.delete(post)
+    await db.commit()
+    return {"status": "ok"}
 
 
 @app.post("/contas/{account_id}/conectar")

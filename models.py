@@ -62,6 +62,18 @@ class SharkbotEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ScheduledPost(Base):
+    __tablename__ = "scheduled_posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    account_id: Mapped[int] = mapped_column(nullable=False, index=True)
+    media_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    caption: Mapped[str] = mapped_column(String(2200), nullable=True, default="")
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="agendado")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 def build_database_url() -> tuple[str, dict]:
     configured_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./auto_wave.db").strip()
     if configured_url.startswith(("postgres://", "postgresql://", "postgresql+asyncpg://")):

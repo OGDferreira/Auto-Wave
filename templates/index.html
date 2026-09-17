@@ -24,6 +24,7 @@
           <button class="nav-button" data-page="contas"><span class="nav-icon">◈</span><span>Contas</span></button>
           <button class="nav-button" data-page="config"><span class="nav-icon">⚙</span><span>Config</span></button>
           <button class="nav-button" data-page="fila"><span class="nav-icon">≡</span><span>Fila</span></button>
+          <button class="nav-button" data-page="logs"><span class="nav-icon">⌁</span><span>Logs</span></button>
         </nav>
 
         <div class="sidebar-footer">
@@ -136,26 +137,27 @@
           <form id="config-form" class="config-form glass-panel">
             <div class="field-grid">
               <label>
-                <span>Meta App ID</span>
+                <span>App ID (Meta for Developers)</span>
                 <input id="meta_app_id" name="meta_app_id" type="text" placeholder="" />
               </label>
               <label>
-                <span>Meta App Secret</span>
+                <span>App Secret (Meta for Developers)</span>
                 <input id="meta_app_secret" name="meta_app_secret" type="password" placeholder="" />
               </label>
               <label>
-                <span>Webhook Verify Token</span>
+                <span>Verify Token (Webhooks)</span>
                 <input id="meta_webhook_verify_token" name="meta_webhook_verify_token" type="text" placeholder="" />
               </label>
               <label>
-                <span>VAPID Public Key</span>
+                <span>VAPID Public Key <small>(Push Notifications)</small></span>
                 <input id="vapid_public_key" name="vapid_public_key" type="text" placeholder="" />
               </label>
               <label>
-                <span>VAPID Private Key</span>
+                <span>VAPID Private Key <small>(Push Notifications)</small></span>
                 <input id="vapid_private_key" name="vapid_private_key" type="password" placeholder="" />
               </label>
             </div>
+            <p class="config-help">As três primeiras chaves vêm do Meta for Developers. As chaves VAPID não são do Meta Business: são um par gerado exclusivamente para notificações Web Push.</p>
             <div class="form-actions">
               <button type="submit" class="primary-btn">Salvar chaves</button>
             </div>
@@ -166,25 +168,44 @@
           <header class="page-header">
             <div>
               <p class="eyebrow">Operação</p>
-              <h2>Fila de automações</h2>
+              <h2>Fila de conteúdo</h2>
+              <p class="page-subtitle">Agende mídias, acompanhe o calendário e publique com segurança.</p>
             </div>
           </header>
 
-          <div class="glass-panel">
-            <div class="queue-list" id="fila-list">
-              <div class="queue-item">
-                <span>Conexão de contas pendentes</span>
-                <strong>Disponível</strong>
+          <div class="scheduler-layout">
+            <form id="schedule-form" class="glass-panel scheduler-form">
+              <div class="panel-head">
+                <p class="eyebrow">Novo agendamento</p>
+                <h3>Postagem programada</h3>
               </div>
-              <div class="queue-item">
-                <span>Relatórios diários</span>
-                <strong>Agendado</strong>
+              <label><span>Conta de destino</span><select id="schedule-account" required></select></label>
+              <label><span>URL da mídia</span><input id="schedule-media" type="url" placeholder="https://..." required /></label>
+              <label><span>Legenda</span><textarea id="schedule-caption" rows="5" placeholder="Escreva uma legenda para a publicação"></textarea></label>
+              <label><span>Data e horário</span><input id="schedule-date" type="datetime-local" required /></label>
+              <button class="primary-btn" type="submit">Adicionar à fila →</button>
+            </form>
+            <section class="glass-panel queue-panel">
+              <div class="panel-head queue-heading">
+                <div><p class="eyebrow">Fila detalhada</p><h3>Publicações programadas</h3></div>
+                <span id="queue-count" class="count-badge">0 itens</span>
               </div>
-              <div class="queue-item">
-                <span>Webhook Sharkbot</span>
-                <strong>Escutando</strong>
-              </div>
-            </div>
+              <div id="calendar-strip" class="calendar-strip"></div>
+              <div id="fila-list" class="queue-cards"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="page-logs" class="page">
+          <header class="page-header">
+            <div><p class="eyebrow">Observabilidade</p><h2>Logs & Sistema</h2><p class="page-subtitle">Acompanhe as operações do Auto-Wave em tempo real.</p></div>
+            <span class="live-badge">● Ao vivo</span>
+          </header>
+          <div class="logs-layout">
+            <article class="glass-panel system-card"><p class="eyebrow">Versão</p><h3>Informações do sistema</h3><div class="system-row"><span>Aplicação</span><strong>1.0.0</strong></div><div class="system-row"><span>Polling</span><strong>5s</strong></div></article>
+            <article class="glass-panel log-panel"><div class="panel-head"><p class="eyebrow">Worker</p><h3>Últimos registros</h3></div><pre id="log-output">[agora] INFO  Auto-Wave pronto para receber operações.
+[agora] INFO  Webhook Sharkbot aguardando eventos.
+[agora] INFO  Fila de publicações sincronizada.</pre></article>
           </div>
         </section>
       </main>
