@@ -15,6 +15,7 @@ const scheduleMedia = document.getElementById('schedule-media');
 const scheduleFile = document.getElementById('schedule-file');
 const mediaUploadStatus = document.getElementById('media-upload-status');
 const mediaPreview = document.getElementById('media-preview');
+const mediaDropzone = document.getElementById('media-dropzone');
 const scheduleAccounts = document.getElementById('schedule-accounts');
 const mediaItems = document.getElementById('media-items');
 const scheduleSelectAll = document.getElementById('schedule-select-all');
@@ -65,7 +66,8 @@ function renderMediaItems() {
         : `<img src="${item.media_url}" alt="Miniatura ${index + 1}" />`}
       </div>
       <div class="media-item-info"><strong>${item.name || `Mídia ${index + 1}`}</strong><small>${item.media_type} · ordem ${index + 1}</small>
-        <input class="thumbnail-input" data-index="${index}" type="url" value="${item.thumbnail_url || ''}" placeholder="URL da thumbnail (opcional)" />
+        <input class="thumbnail-file-input" data-index="${index}" type="file" accept="image/*" hidden />
+        <button class="thumbnail-button" data-index="${index}" type="button">Escolher capa</button>
         <input class="caption-input" data-index="${index}" type="text" value="${item.caption || ''}" placeholder="Legenda desta mídia" /></div>
       <button class="remove-media-button" data-index="${index}" type="button" aria-label="Remover mídia">×</button>
     </article>`).join('');
@@ -76,8 +78,22 @@ function renderMediaItems() {
   mediaItems.querySelectorAll('.caption-input').forEach((input) => input.addEventListener('input', () => {
     importedMedia[Number(input.dataset.index)].caption = input.value;
   }));
-  mediaItems.querySelectorAll('.thumbnail-input').forEach((input) => input.addEventListener('input', () => {
-    importedMedia[Number(input.dataset.index)].thumbnail_url = input.value;
+  mediaItems.querySelectorAll('.thumbnail-button').forEach((button) => button.addEventListener('click', () => {
+    mediaItems.querySelector(`.thumbnail-file-input[data-index="${button.dataset.index}"]`)?.click();
+  }));
+  mediaItems.querySelectorAll('.thumbnail-file-input').forEach((input) => input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    buttonUploadStatus(input.dataset.index, `Enviando capa de ${file.name}…`);
+    try {
+      const payload = await uploadMediaFile(file);
+      importedMedia[Number(input.dataset.index)].thumbnail_url = payload.url;
+      importedMedia[Number(input.dataset.index)].thumbnail_name = file.name;
+      renderMediaItems();
+      notify('Capa da publicação atualizada.', 'success');
+    } catch (error) {
+      notify(error.message || 'Não foi possível enviar a capa.', 'error');
+    }
   }));
   mediaItems.querySelectorAll('.media-item').forEach((card) => {
     card.addEventListener('dragstart', (event) => event.dataTransfer.setData('text/plain', card.dataset.mediaIndex));
@@ -91,6 +107,20 @@ function renderMediaItems() {
       renderMediaItems();
     });
   });
+}
+
+function buttonUploadStatus(index, message) {
+  const button = mediaItems?.querySelector(`.thumbnail-button[data-index="${index}"]`);
+  if (button) button.textContent = message;
+}
+
+async function uploadMediaFile(file) {
+  const formData = new FormData();
+  formData.append('media', file);
+  const response = await fetch('/api/media/upload', { method: 'POST', body: formData });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.detail || 'Falha no upload da mídia.');
+  return payload;
 }
 
 scheduleSelectAll?.addEventListener('change', () => {
@@ -348,18 +378,13 @@ async function loadAccounts() {
 
 }
 
-scheduleFile?.addEventListener('change', async () => {
-  const files = [...(scheduleFile.files || [])];
+async function importMediaFiles(files) {
   if (!files.length) return;
   mediaUploadStatus.textContent = `Enviando ${files.length} mídia(s)…`;
   mediaUploadStatus.className = 'media-upload-status is-loading';
   for (const file of files) {
     try {
-      const formData = new FormData();
-      formData.append('media', file);
-      const response = await fetch('/api/media/upload', { method: 'POST', body: formData });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.detail || 'Falha no upload.');
+      const payload = await uploadMediaFile(file);
       importedMedia.push({ ...payload, name: file.name, thumbnail_url: payload.url, caption: '' });
     } catch (error) {
       notify(`${file.name}: ${error.message}`, 'error');
@@ -369,6 +394,18 @@ scheduleFile?.addEventListener('change', async () => {
   mediaUploadStatus.textContent = `${importedMedia.length} mídia(s) importada(s). Arraste para reordenar.`;
   mediaUploadStatus.className = 'media-upload-status is-success';
   scheduleFile.value = '';
+}
+
+scheduleFile?.addEventListener('change', () => importMediaFiles([...scheduleFile.files]));
+mediaDropzone?.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  mediaDropzone.classList.add('is-dragging');
+});
+mediaDropzone?.addEventListener('dragleave', () => mediaDropzone.classList.remove('is-dragging'));
+mediaDropzone?.addEventListener('drop', (event) => {
+  event.preventDefault();
+  mediaDropzone.classList.remove('is-dragging');
+  importMediaFiles([...event.dataTransfer.files].filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/')));
 });
 
 function renderQueue(posts) {
