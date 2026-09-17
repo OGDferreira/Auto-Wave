@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import time
 from typing import Any
@@ -23,6 +24,7 @@ from models import (
     session_dependency,
 )
 
+logger = logging.getLogger("auto_wave")
 
 app = FastAPI(title="Auto-Wave", version="1.0.0")
 
@@ -161,12 +163,32 @@ async def run_playwright_login(account_id: int) -> None:
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    await init_db()
+    try:
+        await init_db()
+        logger.info("Database initialized successfully")
+    except Exception:
+        logger.exception("Database initialization failed; application started without database access")
 
 
 @app.get("/")
-async def home(request: Request, db: AsyncSession = Depends(session_dependency)):
-    metrics = await get_dashboard_metrics(db)
+async def home(request: Request):
+    metrics = {
+        "views_total": 0,
+        "leads_total": 0,
+        "lead_events": 0,
+        "pix_gerado": 0,
+        "pix_pago": 0,
+        "valor_total": 0.0,
+        "lead_rate": 0.0,
+        "pix_rate": 0.0,
+        "overall_conversion": 0.0,
+        "accounts_total": 0,
+    }
+    try:
+        async with AsyncSessionLocal() as db:
+            metrics = await get_dashboard_metrics(db)
+    except Exception:
+        logger.exception("Dashboard metrics unavailable")
     return templates.TemplateResponse(
         "index.html",
         {

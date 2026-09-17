@@ -1,7 +1,7 @@
 import os
 import socket
 from datetime import datetime
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import DateTime, Float, JSON, String, func
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -64,19 +64,15 @@ class SharkbotEvent(Base):
 
 def build_database_url() -> tuple[str, dict]:
     configured_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./auto_wave.db").strip()
-    if configured_url.startswith(("postgres://", "postgresql://")):
+    if configured_url.startswith(("postgres://", "postgresql://", "postgresql+asyncpg://")):
         parsed = urlsplit(configured_url)
-        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-        query.pop("sslmode", None)
-        query.pop("channel_binding", None)
-        is_transaction_pooler = parsed.port == 6543 or query.pop("pgbouncer", "").lower() == "true"
         database_url = urlunsplit(
             (
                 "postgresql+asyncpg",
                 parsed.netloc,
                 parsed.path,
-                urlencode(query),
-                parsed.fragment,
+                "",
+                "",
             )
         )
         connect_args = {
@@ -84,9 +80,8 @@ def build_database_url() -> tuple[str, dict]:
             "ssl": "require",
             "timeout": 15,
         }
-        if is_transaction_pooler:
+        if parsed.port == 6543:
             connect_args["statement_cache_size"] = 0
-            connect_args["prepared_statement_cache_size"] = 0
         return database_url, connect_args
 
     return configured_url, {}
