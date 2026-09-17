@@ -466,6 +466,7 @@ async def database_health():
                 "database": database_target(),
                 "message": "Não foi possível conectar ao PostgreSQL. Verifique host, porta, senha e acesso de rede do Supabase.",
                 "error_type": type(exc).__name__,
+                "error": str(exc),
             },
         )
 

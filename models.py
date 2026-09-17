@@ -102,7 +102,6 @@ def build_database_url() -> tuple[str, dict]:
             )
         )
         connect_args = {
-            "family": socket.AF_INET,
             "ssl": "require",
             "timeout": 15,
         }
