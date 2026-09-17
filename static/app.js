@@ -28,7 +28,6 @@ const userMenuButton = document.getElementById('user-menu-button');
 const userMenuPanel = document.getElementById('user-menu-panel');
 const currentUsername = document.getElementById('current-username');
 const userMenuName = document.getElementById('user-menu-name');
-const openCollaboratorButton = document.getElementById('open-collaborator-button');
 const logoutButton = document.getElementById('logout-button');
 const queueList = document.getElementById('fila-list');
 const queueCount = document.getElementById('queue-count');
@@ -350,6 +349,13 @@ function renderAccounts(accounts) {
         ? 'A conta está suspensa ou foi bloqueada pela plataforma.'
         : 'A conta foi importada e aguarda conexão/autorização.';
       header.appendChild(reason);
+      const explanation = document.createElement('p');
+      explanation.className = 'account-explanation';
+      explanation.textContent = reason.dataset.tooltip;
+      card.appendChild(header);
+      card.appendChild(explanation);
+    } else {
+      card.appendChild(header);
     }
 
     const action = document.createElement('button');
@@ -360,7 +366,6 @@ function renderAccounts(accounts) {
       window.location.href = `/auth/meta/login?account_id=${encodeURIComponent(account.id)}`;
     });
 
-    card.appendChild(header);
     card.appendChild(metaToken);
     card.appendChild(details);
     card.appendChild(action);
@@ -678,15 +683,24 @@ async function enablePushNotifications() {
 
 notifyButton?.addEventListener('click', enablePushNotifications);
 
+function closeProfileModal() {
+  if (!userMenuPanel) return;
+  userMenuPanel.hidden = true;
+  userMenuButton?.setAttribute('aria-expanded', 'false');
+}
+
 userMenuButton?.addEventListener('click', () => {
   const open = userMenuPanel.hidden;
   userMenuPanel.hidden = !open;
   userMenuButton.setAttribute('aria-expanded', String(open));
+  if (open) document.getElementById('collaborator-username')?.focus();
 });
-openCollaboratorButton?.addEventListener('click', () => {
-  userMenuPanel.hidden = true;
-  showPage('config');
-  document.getElementById('collaborator-username')?.focus();
+document.getElementById('close-profile-button')?.addEventListener('click', closeProfileModal);
+userMenuPanel?.addEventListener('click', (event) => {
+  if (event.target === userMenuPanel) closeProfileModal();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeProfileModal();
 });
 logoutButton?.addEventListener('click', async () => {
   await fetchJson('/api/auth/logout', { method: 'POST' });
@@ -730,7 +744,6 @@ async function bootPanel() {
     if (user.role === 'collaborator') {
       document.querySelectorAll('[data-page="dashboard"], [data-page="config"], [data-page="fila"], [data-page="logs"]').forEach((button) => button.remove());
       document.querySelector('.owner-only')?.remove();
-      openCollaboratorButton?.remove();
     }
     if (window.__INITIAL_METRICS__) updateMetrics(window.__INITIAL_METRICS__);
     showPage(user.role === 'collaborator' ? 'contas' : 'dashboard');

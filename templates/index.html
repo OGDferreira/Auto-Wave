@@ -37,14 +37,26 @@
         <header class="topbar">
           <div class="topbar-spacer"></div>
           <div class="user-menu">
-            <button id="user-menu-button" class="user-menu-button" type="button" aria-expanded="false"><span class="user-avatar">♙</span><span id="current-username">Usuário</span><span>⌄</span></button>
-            <div id="user-menu-panel" class="user-menu-panel" hidden>
-              <strong id="user-menu-name">Usuário</strong>
-              <button id="open-collaborator-button" type="button">＋ Adicionar colaborador</button>
-              <button id="logout-button" type="button">Sair</button>
-            </div>
+            <button id="user-menu-button" class="user-menu-button" type="button" aria-expanded="false" aria-label="Abrir perfil"><span class="user-avatar">♙</span></button>
           </div>
         </header>
+        <div id="user-menu-panel" class="profile-modal-backdrop" hidden>
+          <section class="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+            <button id="close-profile-button" class="profile-modal-close" type="button" aria-label="Fechar">×</button>
+            <p class="eyebrow">Conta e acessos</p>
+            <h3 id="profile-modal-title">Meu perfil</h3>
+            <div class="profile-divider"></div>
+            <strong id="user-menu-name">Usuário</strong>
+            <form id="collaborator-form" class="profile-collaborator-form owner-only">
+              <h4>Adicionar colaborador</h4>
+              <p>O colaborador poderá conectar contas no Hub, sem acesso ao dashboard.</p>
+              <label><span>Nome de usuário</span><input id="collaborator-username" required minlength="3" /></label>
+              <label><span>Senha</span><input id="collaborator-password" type="password" required minlength="8" /></label>
+              <button class="primary-btn" type="submit">Criar colaborador</button>
+            </form>
+            <button id="logout-button" class="profile-logout-button" type="button">⇥ Sair</button>
+          </section>
+        </div>
         <section id="page-dashboard" class="page active">
           <header class="page-header">
             <div>
@@ -204,14 +216,6 @@
             <div class="form-actions">
               <button type="submit" class="primary-btn">Salvar chaves</button>
             </div>
-          </form>
-          <form id="collaborator-form" class="config-form glass-panel owner-only">
-            <div class="panel-head"><p class="eyebrow">Equipe</p><h3>Criar colaborador</h3><span class="page-subtitle">Colaboradores acessam somente o Hub de contas.</span></div>
-            <div class="field-grid">
-              <label><span>Usuário</span><input id="collaborator-username" required minlength="3" /></label>
-              <label><span>Senha</span><input id="collaborator-password" type="password" required minlength="8" /></label>
-            </div>
-            <div class="form-actions"><button class="secondary-btn" type="submit">Criar acesso</button></div>
           </form>
         </section>
 

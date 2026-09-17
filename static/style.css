@@ -183,12 +183,12 @@ textarea {
 
 .user-menu { position: relative; }
 .user-menu-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
   margin: 0;
-  padding: 7px 10px;
+  padding: 4px;
   border: 1px solid var(--border);
   border-radius: 11px;
   background: rgba(17, 17, 17, 0.86);
@@ -206,29 +206,78 @@ textarea {
   color: #fff;
   font-weight: 700;
 }
-.user-menu-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 10;
+.profile-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
   display: grid;
-  min-width: 190px;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid rgba(168, 85, 247, 0.35);
-  border-radius: 12px;
-  background: #12121a;
-  box-shadow: 0 18px 35px rgba(0, 0, 0, 0.5);
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 3, 10, 0.78);
+  backdrop-filter: blur(9px);
 }
-.user-menu-panel button {
-  width: 100%;
+.profile-modal-backdrop[hidden] {
+  display: none;
+}
+.profile-modal {
+  position: relative;
+  width: min(100%, 360px);
+  padding: 20px;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  border-radius: 16px;
+  background: linear-gradient(145deg, #111522, #090b13);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.62), 0 0 30px rgba(139, 92, 246, 0.1);
+}
+.profile-modal h3 {
+  margin: 3px 0 0;
+}
+.profile-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
   margin: 0;
-  padding: 9px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.profile-divider {
+  height: 1px;
+  margin: 14px 0;
+  background: var(--border);
+}
+.profile-collaborator-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+.profile-collaborator-form h4 {
+  margin: 0;
+}
+.profile-collaborator-form p {
+  margin: -3px 0 2px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.profile-collaborator-form label {
+  display: grid;
+  gap: 5px;
+}
+.profile-collaborator-form input {
+  width: 100%;
+}
+.profile-logout-button {
+  width: auto;
+  margin-top: 12px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
   color: var(--text);
-  text-align: left;
   cursor: pointer;
 }
 
@@ -571,6 +620,22 @@ code {
   font-size: 0.68rem;
 }
 
+.account-explanation {
+  padding: 5px 7px;
+  border-left: 2px solid var(--yellow);
+  border-radius: 4px;
+  background: rgba(250, 204, 21, 0.07);
+  color: #fde68a !important;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.account-card[data-status="suspensa"] .account-explanation {
+  border-left-color: var(--red);
+  background: rgba(239, 68, 68, 0.08);
+  color: #fca5a5 !important;
+}
+
 .account-card button {
   margin-top: 7px;
   width: 100%;
@@ -820,10 +885,10 @@ button:disabled {
 
 .media-item {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) 28px;
+  grid-template-columns: 72px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 9px;
-  padding: 8px;
+  padding: 9px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.025);
@@ -831,8 +896,8 @@ button:disabled {
 }
 
 .media-item-preview {
-  width: 54px;
-  height: 54px;
+  width: 68px;
+  height: 68px;
   overflow: hidden;
   border-radius: 8px;
   background: #08090e;
@@ -853,6 +918,18 @@ button:disabled {
   display: grid;
   min-width: 0;
   gap: 3px;
+}
+
+.media-item-info .thumbnail-button {
+  width: fit-content;
+  margin: 0;
+  padding: 4px 7px;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.08);
+  color: #ddd6fe;
+  font-size: 0.68rem;
+  cursor: pointer;
 }
 
 .media-item-info input {
@@ -908,6 +985,19 @@ button:disabled {
   border: 1px solid rgba(168, 85, 247, 0.24);
   border-radius: 14px;
   background: linear-gradient(145deg, rgba(139, 92, 246, 0.08), rgba(8, 8, 14, 0.7));
+}
+
+.scheduler-form {
+  border-color: rgba(83, 121, 215, 0.55);
+  box-shadow: 0 0 24px rgba(48, 79, 160, 0.08);
+}
+
+.scheduler-form .panel-head {
+  margin-bottom: 14px;
+}
+
+.scheduler-form .panel-head h3 {
+  font-size: 1.05rem;
 }
 
 .media-importer-head {

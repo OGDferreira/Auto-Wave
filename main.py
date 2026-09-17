@@ -1024,10 +1024,14 @@ async def render_logs():
             )
         if response.is_error:
             logger.error("Render logs API returned HTTP %s", response.status_code)
-            raise HTTPException(
-                status_code=502,
-                detail=f"A API do Render recusou a consulta de logs (HTTP {response.status_code}).",
+            messages = list(recent_logs)
+            messages.append(
+                f"Render recusou a consulta de logs (HTTP {response.status_code}). "
+                "Exibindo os registros da aplicação até o momento."
             )
+            if database_error:
+                messages.append(database_error)
+            return {"logs": messages[-100:], "source": "application-fallback"}
 
         payload = response.json()
         raw_logs = payload.get("logs", payload) if isinstance(payload, dict) else payload
