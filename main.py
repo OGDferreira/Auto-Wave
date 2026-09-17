@@ -745,20 +745,22 @@ async def meta_callback(
 
 @app.get("/webhook/meta")
 async def verify_meta_webhook(request: Request, db: AsyncSession = Depends(session_dependency)):
-    configured_token = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "").strip()
-    if not configured_token:
+    configured_tokens = {os.getenv("META_WEBHOOK_VERIFY_TOKEN", "").strip()}
+    configured_tokens.discard("")
+    if not configured_tokens:
         try:
             config = await get_or_create_system_config(db)
-            configured_token = config.meta_webhook_verify_token or ""
+            configured_tokens.add(config.meta_webhook_verify_token or "")
         except Exception:
             logger.exception("Could not load Meta webhook verification token")
             raise HTTPException(status_code=503, detail="Banco indisponível para validar o webhook.")
     params = request.query_params
     if (
         params.get("hub.mode") == "subscribe"
-        and hmac.compare_digest(
-            params.get("hub.verify_token", ""),
-            configured_token,
+        and any(
+            hmac.compare_digest(params.get("hub.verify_token", ""), token)
+            for token in configured_tokens
+            if token
         )
     ):
         return PlainTextResponse(params.get("hub.challenge", ""))
