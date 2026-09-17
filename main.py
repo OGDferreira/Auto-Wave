@@ -303,9 +303,10 @@ async def upload_media(
     return {"url": media_url, "media_type": "VIDEO" if content_type.startswith("video/") else "IMAGE", "filename": media.filename or "mídia"}
 
 
-async def get_dashboard_metrics(db: AsyncSession) -> dict[str, Any]:
-    views_total = await db.scalar(select(func.coalesce(func.sum(Account.views_count), 0))) or 0
-    leads_total = await db.scalar(select(func.coalesce(func.sum(Account.leads_count), 0))) or 0
+async def get_dashboard_metrics(db: AsyncSession, owner_id: int | None = None) -> dict[str, Any]:
+    account_filter = Account.owner_id == owner_id if owner_id is not None else True
+    views_total = await db.scalar(select(func.coalesce(func.sum(Account.views_count), 0)).where(account_filter)) or 0
+    leads_total = await db.scalar(select(func.coalesce(func.sum(Account.leads_count), 0)).where(account_filter)) or 0
 
     sharkbot_rows = (
         await db.execute(
@@ -320,11 +321,21 @@ async def get_dashboard_metrics(db: AsyncSession) -> dict[str, Any]:
     pix_pago = int(metric_map.get("pix_pago", {}).get("count", 0))
     valor_total = float(sum(item["valor"] for item in metric_map.values()))
     today = datetime.now().date()
+    post_filter = ScheduledPost.owner_id == owner_id if owner_id is not None else True
     posts_today = await db.scalar(
-        select(func.count(ScheduledPost.id)).where(func.date(ScheduledPost.created_at) == today)
+        select(func.count(ScheduledPost.id)).where(post_filter, func.date(ScheduledPost.created_at) == today)
     ) or 0
     published = await db.scalar(
-        select(func.count(ScheduledPost.id)).where(ScheduledPost.status == "publicado")
+        select(func.count(ScheduledPost.id)).where(post_filter, ScheduledPost.status == "publicado")
+    ) or 0
+    failed = await db.scalar(
+        select(func.count(ScheduledPost.id)).where(
+            post_filter,
+            ScheduledPost.status.in_(("falhou", "falha", "failed")),
+        )
+    ) or 0
+    suspended = await db.scalar(
+        select(func.count(Account.id)).where(account_filter, Account.status == "suspensa")
     ) or 0
 
     def safe_rate(part: float, total: float) -> float:
@@ -342,10 +353,12 @@ async def get_dashboard_metrics(db: AsyncSession) -> dict[str, Any]:
         "lead_rate": safe_rate(lead_events, views_total),
         "pix_rate": safe_rate(pix_pago, pix_gerado),
         "overall_conversion": safe_rate(leads_total, views_total),
-        "accounts_total": await db.scalar(select(func.count(Account.id))) or 0,
-        "accounts_active": await db.scalar(select(func.count(Account.id)).where(Account.status == "conectada")) or 0,
+        "accounts_total": await db.scalar(select(func.count(Account.id)).where(account_filter)) or 0,
+        "accounts_active": await db.scalar(select(func.count(Account.id)).where(account_filter, Account.status == "conectada")) or 0,
         "posts_today": int(posts_today),
         "published": int(published),
+        "failed": int(failed),
+        "suspended": int(suspended),
     }
 
 
@@ -530,7 +543,8 @@ async def home(request: Request):
     }
     try:
         async with AsyncSessionLocal() as db:
-            metrics = await get_dashboard_metrics(db)
+            user = await current_user(request, db)
+            metrics = await get_dashboard_metrics(db, owner_id_for(user) if user else None)
     except Exception:
         logger.exception("Dashboard metrics unavailable")
     return templates.TemplateResponse(
@@ -965,8 +979,9 @@ async def webhook_sharkbot(request: Request, db: AsyncSession = Depends(session_
 
 
 @app.get("/api/metricas")
-async def metricas(db: AsyncSession = Depends(session_dependency)):
-    return await get_dashboard_metrics(db)
+async def metricas(request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await require_user(request, db)
+    return await get_dashboard_metrics(db, owner_id_for(user))
 
 
 @app.get("/api/logs")

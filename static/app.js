@@ -208,6 +208,8 @@ function updateMetrics(metrics) {
     'metric-leads-sharkbot': metrics.lead_events || metrics.leads_total || 0,
     'metric-pix-generated': metrics.pix_gerado || 0,
     'metric-pix-paid': metrics.pix_pago || 0,
+    'metric-failed': metrics.failed || 0,
+    'metric-suspended': metrics.suspended || 0,
     'conversion-overall': `${metrics.overall_conversion || 0}%`,
     'conversion-pix': `${metrics.pix_rate || 0}%`,
     'valor-total': new Intl.NumberFormat('pt-BR', {
