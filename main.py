@@ -14,6 +14,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -263,7 +264,7 @@ async def post_config(payload: ConfigPayload, db: AsyncSession = Depends(session
         logger.exception("Could not save system configuration")
         raise HTTPException(
             status_code=503,
-            detail="Não foi possível salvar as chaves no banco de dados.",
+            detail="Não foi possível salvar as chaves: o banco de dados está indisponível. Verifique DATABASE_URL e o status do Supabase.",
         ) from exc
 
 
@@ -372,16 +373,23 @@ async def meta_callback(
 
 @app.get("/webhook/meta")
 async def verify_meta_webhook(request: Request, db: AsyncSession = Depends(session_dependency)):
-    config = await get_or_create_system_config(db)
+    configured_token = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "").strip()
+    if not configured_token:
+        try:
+            config = await get_or_create_system_config(db)
+            configured_token = config.meta_webhook_verify_token or ""
+        except Exception:
+            logger.exception("Could not load Meta webhook verification token")
+            raise HTTPException(status_code=503, detail="Banco indisponível para validar o webhook.")
     params = request.query_params
     if (
         params.get("hub.mode") == "subscribe"
         and hmac.compare_digest(
             params.get("hub.verify_token", ""),
-            config.meta_webhook_verify_token or "",
+            configured_token,
         )
     ):
-        return JSONResponse(content=int(params.get("hub.challenge", "0")))
+        return PlainTextResponse(params.get("hub.challenge", ""))
     raise HTTPException(status_code=403, detail="Token de verificação inválido.")
 
 

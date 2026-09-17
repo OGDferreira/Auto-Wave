@@ -169,7 +169,7 @@ textarea {
 .main-panel {
   flex: 1;
   min-width: 0;
-  margin-left: 22px;
+  margin-left: 260px;
   padding: 32px;
   animation: content-in 0.55s ease both;
 }
