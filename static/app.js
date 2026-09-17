@@ -276,19 +276,23 @@ async function loadAccounts() {
       const posts = await fetchJson('/api/fila');
       renderQueue(posts);
     } catch (error) {
-      notify('Não foi possível carregar a fila.', 'error');
+      if (queueList) {
+        queueList.innerHTML = '<div class="empty-state"><strong>Fila indisponível</strong><span>Não foi possível carregar as publicações agora.</span></div>';
+      }
+      console.error('Erro ao carregar fila', error);
     }
 
-    queueAccountFilter?.addEventListener('change', () => {
-      queueSelectedDay = null;
-      renderQueue(queuePostsCache);
-    });
-    queueAllButton?.addEventListener('click', () => {
-      queueAccountFilter.value = 'all';
-      queueSelectedDay = null;
-      renderQueue(queuePostsCache);
-    });
   }
+
+  queueAccountFilter?.addEventListener('change', () => {
+    queueSelectedDay = null;
+    renderQueue(queuePostsCache);
+  });
+  queueAllButton?.addEventListener('click', () => {
+    queueAccountFilter.value = 'all';
+    queueSelectedDay = null;
+    renderQueue(queuePostsCache);
+  });
 
   scheduleForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
