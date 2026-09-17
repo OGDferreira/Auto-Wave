@@ -46,9 +46,8 @@ textarea {
 }
 
 .sidebar {
-  position: sticky;
-  top: 0;
-  align-self: flex-start;
+  position: fixed;
+  inset: 0 auto 0 0;
   min-height: 100vh;
   width: 260px;
   flex: 0 0 260px;
@@ -58,6 +57,29 @@ textarea {
   backdrop-filter: blur(18px);
   z-index: 5;
   animation: sidebar-in 0.5s ease both;
+  transform: translateX(calc(-100% + 22px));
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
+}
+
+.sidebar::after {
+  position: absolute;
+  top: 50%;
+  right: -7px;
+  width: 7px;
+  height: 76px;
+  border: 1px solid rgba(168, 85, 247, 0.65);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  background: linear-gradient(180deg, var(--purple), var(--purple-strong));
+  box-shadow: 0 0 18px rgba(168, 85, 247, 0.45);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.sidebar:hover,
+.sidebar:focus-within {
+  transform: translateX(0);
+  box-shadow: 12px 0 34px rgba(0, 0, 0, 0.42), 0 0 28px rgba(139, 92, 246, 0.12);
 }
 
 .brand-wrap {
@@ -147,6 +169,7 @@ textarea {
 .main-panel {
   flex: 1;
   min-width: 0;
+  margin-left: 22px;
   padding: 32px;
   animation: content-in 0.55s ease both;
 }
@@ -691,11 +714,23 @@ button:disabled {
   }
 
   .sidebar {
+    position: relative;
+    inset: auto;
     width: 100%;
     min-height: auto;
     flex: none;
+    margin: 0;
+    transform: none;
     border-right: none;
     border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar::after {
+    display: none;
+  }
+
+  .main-panel {
+    margin-left: 0;
   }
 
   .stats-grid,
