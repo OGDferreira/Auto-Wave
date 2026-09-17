@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050505" />
+    <title>Auto-Wave</title>
+    <link rel="manifest" href="/static/manifest.json" />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-wrap">
+          <div class="brand-mark">AW</div>
+          <div>
+            <h1>Auto-Wave</h1>
+          </div>
+        </div>
+
+        <nav class="nav-menu" aria-label="Menu principal">
+          <button class="nav-button active" data-page="dashboard">Dashboard</button>
+          <button class="nav-button" data-page="contas">Contas</button>
+          <button class="nav-button" data-page="config">Config</button>
+          <button class="nav-button" data-page="fila">Fila</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <p>Modo resiliência</p>
+          <strong>Meta + Sharkbot</strong>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <section id="page-dashboard" class="page active">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h2>Dashboard</h2>
+            </div>
+            <button id="notify-button" class="primary-btn">Ativar notificações</button>
+          </header>
+
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span>Visualizações</span>
+              <strong id="metric-views">0</strong>
+            </article>
+            <article class="stat-card">
+              <span>Leads</span>
+              <strong id="metric-leads">0</strong>
+            </article>
+            <article class="stat-card">
+              <span>Taxa de lead</span>
+              <strong id="metric-lead-rate">0%</strong>
+            </article>
+            <article class="stat-card">
+              <span>Vendas / Pix</span>
+              <strong id="metric-pix">0</strong>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <article class="glass-panel">
+              <div class="panel-head">
+                <h3>Funil de conversão</h3>
+              </div>
+              <div class="chart-list">
+                <div class="chart-row">
+                  <span>Visitas → Leads</span>
+                  <strong id="conversion-overall">0%</strong>
+                </div>
+                <div class="chart-row">
+                  <span>Leads → Pix</span>
+                  <strong id="conversion-pix">0%</strong>
+                </div>
+                <div class="chart-row">
+                  <span>Valor bruto</span>
+                  <strong id="valor-total">R$ 0,00</strong>
+                </div>
+              </div>
+            </article>
+
+            <article class="glass-panel">
+              <div class="panel-head">
+                <h3>Atividade</h3>
+              </div>
+              <ul class="feed-list">
+                <li>Conexões ativas monitoradas sem interrupções.</li>
+                <li>Webhook Sharkbot recebendo eventos em tempo real.</li>
+                <li>Push notifications prontas para alertas de vendas e métricas.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section id="page-contas" class="page">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">Contas</p>
+              <h2>Hub das contas</h2>
+            </div>
+          </header>
+
+          <div class="panel-form-block">
+            <form id="import-form" class="inline-form">
+              <label for="contas-input">Importar lote</label>
+              <textarea id="contas-input" name="contas" rows="6" placeholder="@usuario;senha"></textarea>
+              <button type="submit" class="primary-btn">Importar contas</button>
+            </form>
+          </div>
+
+          <div id="contas-list" class="accounts-grid"></div>
+        </section>
+
+        <section id="page-config" class="page">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">Sistema</p>
+              <h2>Configuração da Meta</h2>
+            </div>
+          </header>
+
+          <form id="config-form" class="config-form glass-panel">
+            <div class="field-grid">
+              <label>
+                <span>Meta App ID</span>
+                <input id="meta_app_id" name="meta_app_id" type="text" placeholder="" />
+              </label>
+              <label>
+                <span>Meta App Secret</span>
+                <input id="meta_app_secret" name="meta_app_secret" type="password" placeholder="" />
+              </label>
+              <label>
+                <span>Webhook Verify Token</span>
+                <input id="meta_webhook_verify_token" name="meta_webhook_verify_token" type="text" placeholder="" />
+              </label>
+              <label>
+                <span>VAPID Public Key</span>
+                <input id="vapid_public_key" name="vapid_public_key" type="text" placeholder="" />
+              </label>
+              <label>
+                <span>VAPID Private Key</span>
+                <input id="vapid_private_key" name="vapid_private_key" type="password" placeholder="" />
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary-btn">Salvar chaves</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="page-fila" class="page">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">Operação</p>
+              <h2>Fila de automações</h2>
+            </div>
+          </header>
+
+          <div class="glass-panel">
+            <div class="queue-list" id="fila-list">
+              <div class="queue-item">
+                <span>Conexão de contas pendentes</span>
+                <strong>Disponível</strong>
+              </div>
+              <div class="queue-item">
+                <span>Relatórios diários</span>
+                <strong>Agendado</strong>
+              </div>
+              <div class="queue-item">
+                <span>Webhook Sharkbot</span>
+                <strong>Escutando</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      window.__INITIAL_METRICS__ = {{ initial_metrics | tojson }};
+    </script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

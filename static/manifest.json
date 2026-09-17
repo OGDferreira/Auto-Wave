@@ -1,0 +1,10 @@
+{
+  "name": "Auto-Wave",
+  "short_name": "AutoWave",
+  "description": "SaaS de automação para redes sociais com monitoramento em tempo real",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "orientation": "portrait"
+}
