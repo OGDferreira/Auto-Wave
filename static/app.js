@@ -4,20 +4,53 @@ const notifyButton = document.getElementById('notify-button');
 const configForm = document.getElementById('config-form');
 const importForm = document.getElementById('import-form');
 const contasList = document.getElementById('contas-list');
+const refreshAccountsButton = document.getElementById('refresh-accounts');
+const connectFirstAccountButton = document.getElementById('connect-first-account');
+const toastRegion = document.getElementById('toast-region');
+let accountsCache = [];
+let accountPollingTimer;
 
 function showPage(pageId) {
+  const targetPage = document.getElementById(`page-${pageId}`);
+  if (!targetPage) {
+    return;
+  }
+
   pages.forEach((page) => {
-    page.classList.toggle('active', page.id === pageId);
+    page.classList.toggle('active', page.id === `page-${pageId}`);
   });
 
   pageButtons.forEach((button) => {
     button.classList.toggle('active', button.dataset.page === pageId);
+  });
+
+  window.history.replaceState(null, '', `#${pageId}`);
+  window.localStorage.setItem('auto-wave-page', pageId);
+  requestAnimationFrame(() => {
+    targetPage.classList.remove('page-enter');
+    void targetPage.offsetWidth;
+    targetPage.classList.add('page-enter');
   });
 }
 
 pageButtons.forEach((button) => {
   button.addEventListener('click', () => showPage(button.dataset.page));
 });
+
+function notify(message, type = 'info') {
+  if (!toastRegion) {
+    return;
+  }
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  toastRegion.appendChild(toast);
+  window.setTimeout(() => toast.classList.add('toast-visible'), 20);
+  window.setTimeout(() => {
+    toast.classList.remove('toast-visible');
+    window.setTimeout(() => toast.remove(), 250);
+  }, 4000);
+}
 
 function updateMetrics(metrics) {
   const fields = {
@@ -88,6 +121,17 @@ function renderAccounts(accounts) {
 
   contasList.innerHTML = '';
 
+  if (!accounts.length) {
+    contasList.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">◎</div>
+        <strong>Nenhuma conta adicionada</strong>
+        <span>Importe uma conta acima para começar a conexão.</span>
+      </div>
+    `;
+    return;
+  }
+
   accounts.forEach((account) => {
     const card = document.createElement('article');
     card.className = 'account-card';
@@ -95,10 +139,12 @@ function renderAccounts(accounts) {
 
     const header = document.createElement('div');
     header.className = 'account-header';
-    header.innerHTML = `
-      <h4>${account.username}</h4>
-      <span class="account-status">${account.status}</span>
-    `;
+    const title = document.createElement('h4');
+    title.textContent = account.username;
+    const status = document.createElement('span');
+    status.className = 'account-status';
+    status.textContent = account.status;
+    header.append(title, status);
 
     const metaToken = document.createElement('p');
     metaToken.textContent = account.meta_access_token ? 'Meta token ativo' : 'Meta token pendente';
@@ -107,17 +153,25 @@ function renderAccounts(accounts) {
     details.textContent = `Views: ${account.views_count || 0} · Leads: ${account.leads_count || 0}`;
 
     const action = document.createElement('button');
+    action.className = 'account-connect-btn';
     action.type = 'button';
-    action.textContent = 'Conectar conta';
+    action.textContent = account.status === 'conectada' ? 'Reconectar conta' : 'Conectar via Playwright';
     action.addEventListener('click', async () => {
+      action.disabled = true;
+      action.classList.add('is-loading');
+      action.textContent = 'Conectando…';
       try {
-        const result = await fetchJson(`/contas/${account.id}/conectar`, {
+        await fetchJson(`/contas/${account.id}/conectar`, {
           method: 'POST',
         });
-        console.log(result);
-        await loadAccounts();
+        notify(`Conexão de ${account.username} iniciada em background.`, 'success');
+        startAccountPolling();
       } catch (error) {
-        console.error('Falha ao conectar conta', error);
+        notify('Não foi possível iniciar a conexão.', 'error');
+      } finally {
+        action.disabled = false;
+        action.classList.remove('is-loading');
+        action.textContent = account.status === 'conectada' ? 'Reconectar conta' : 'Conectar via Playwright';
       }
     });
 
@@ -132,10 +186,21 @@ function renderAccounts(accounts) {
 async function loadAccounts() {
   try {
     const accounts = await fetchJson('/api/contas');
+    accountsCache = accounts;
     renderAccounts(accounts);
   } catch (error) {
-    console.error('Erro ao carregar contas', error);
+    notify('Não foi possível carregar as contas. Verifique o banco de dados.', 'error');
   }
+}
+
+function startAccountPolling() {
+  window.clearInterval(accountPollingTimer);
+  accountPollingTimer = window.setInterval(async () => {
+    await loadAccounts();
+    if (accountsCache.every((account) => account.status !== 'pendente')) {
+      window.clearInterval(accountPollingTimer);
+    }
+  }, 5000);
 }
 
 configForm?.addEventListener('submit', async (event) => {
@@ -175,10 +240,38 @@ importForm?.addEventListener('submit', async (event) => {
     });
     textarea.value = '';
     await loadAccounts();
+    notify('Contas importadas. Elas já estão disponíveis para conexão.', 'success');
   } catch (error) {
-    console.error(error);
-    alert('Erro ao importar contas');
+    notify('Erro ao importar contas.', 'error');
   }
+});
+
+refreshAccountsButton?.addEventListener('click', async () => {
+  refreshAccountsButton.classList.add('is-loading');
+  await loadAccounts();
+  refreshAccountsButton.classList.remove('is-loading');
+  notify('Lista de contas atualizada.', 'success');
+});
+
+connectFirstAccountButton?.addEventListener('click', async () => {
+  const pending = accountsCache.filter((account) => account.status === 'pendente');
+  if (!pending.length) {
+    notify('Não há contas pendentes para conectar.', 'info');
+    return;
+  }
+  connectFirstAccountButton.disabled = true;
+  connectFirstAccountButton.textContent = 'Conectando…';
+  for (const account of pending) {
+    try {
+      await fetchJson(`/contas/${account.id}/conectar`, { method: 'POST' });
+    } catch (error) {
+      notify(`Falha ao iniciar ${account.username}.`, 'error');
+    }
+  }
+  connectFirstAccountButton.disabled = false;
+  connectFirstAccountButton.textContent = 'Conectar pendentes';
+  notify(`${pending.length} conexão(ões) enviada(s) para a fila.`, 'success');
+  startAccountPolling();
 });
 
 async function registerServiceWorker() {
@@ -245,6 +338,8 @@ if (window.__INITIAL_METRICS__) {
   updateMetrics(window.__INITIAL_METRICS__);
 }
 
+const savedPage = window.location.hash.replace('#', '') || window.localStorage.getItem('auto-wave-page') || window.__INITIAL_PAGE__ || 'dashboard';
+showPage(savedPage);
 loadMetrics();
 loadConfig();
 loadAccounts();

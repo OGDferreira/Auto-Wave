@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand-wrap">
@@ -19,10 +20,10 @@
         </div>
 
         <nav class="nav-menu" aria-label="Menu principal">
-          <button class="nav-button active" data-page="dashboard">Dashboard</button>
-          <button class="nav-button" data-page="contas">Contas</button>
-          <button class="nav-button" data-page="config">Config</button>
-          <button class="nav-button" data-page="fila">Fila</button>
+          <button class="nav-button active" data-page="dashboard"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
+          <button class="nav-button" data-page="contas"><span class="nav-icon">◈</span><span>Contas</span></button>
+          <button class="nav-button" data-page="config"><span class="nav-icon">⚙</span><span>Config</span></button>
+          <button class="nav-button" data-page="fila"><span class="nav-icon">≡</span><span>Fila</span></button>
         </nav>
 
         <div class="sidebar-footer">
@@ -99,14 +100,25 @@
             <div>
               <p class="eyebrow">Contas</p>
               <h2>Hub das contas</h2>
+              <p class="page-subtitle">Conecte, acompanhe e reconecte seus perfis em um só lugar.</p>
             </div>
+            <button id="refresh-accounts" class="secondary-btn" type="button">↻ Atualizar</button>
           </header>
 
           <div class="panel-form-block">
             <form id="import-form" class="inline-form">
-              <label for="contas-input">Importar lote</label>
+              <div class="form-title">
+                <div>
+                  <strong>Adicionar contas</strong>
+                  <span>Uma conta por linha no formato <code>@usuario;senha</code></span>
+                </div>
+                <span class="secure-badge">● Seguro</span>
+              </div>
               <textarea id="contas-input" name="contas" rows="6" placeholder="@usuario;senha"></textarea>
-              <button type="submit" class="primary-btn">Importar contas</button>
+              <div class="form-actions form-actions-start">
+                <button type="submit" class="primary-btn">＋ Importar contas</button>
+                <button id="connect-first-account" type="button" class="secondary-btn">Conectar pendentes</button>
+              </div>
             </form>
           </div>
 
@@ -180,6 +192,7 @@
 
     <script>
       window.__INITIAL_METRICS__ = {{ initial_metrics | tojson }};
+      window.__INITIAL_PAGE__ = 'dashboard';
     </script>
     <script src="/static/app.js"></script>
   </body>
