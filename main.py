@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
@@ -69,20 +70,32 @@ templates = Jinja2Templates(directory="templates")
 @app.middleware("http")
 async def require_panel_login(request: Request, call_next):
     protected_path = request.url.path.startswith("/api/") or request.url.path.startswith("/contas")
-    if protected_path and request.url.path not in {"/api/auth/login", "/api/auth/register", "/api/health/db"}:
-        async with AsyncSessionLocal() as db:
-            user = await current_user(request, db)
-            if user is None:
-                return JSONResponse({"detail": "Faça login para acessar o painel."}, status_code=401)
-            collaborator_paths = {
-                "/api/auth/me",
-                "/api/auth/logout",
-                "/api/contas",
-                "/api/push/subscribe",
-            }
-            is_account_route = request.url.path.startswith("/contas")
-            if not user.is_owner and request.url.path not in collaborator_paths and not is_account_route:
-                return JSONResponse({"detail": "Colaboradores têm acesso somente ao Hub de contas."}, status_code=403)
+    if protected_path and request.url.path not in {
+        "/api/auth/login",
+        "/api/auth/register",
+        "/api/health/db",
+        "/api/logs",
+    }:
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await current_user(request, db)
+                if user is None:
+                    return JSONResponse({"detail": "Faça login para acessar o painel."}, status_code=401)
+                collaborator_paths = {
+                    "/api/auth/me",
+                    "/api/auth/logout",
+                    "/api/contas",
+                    "/api/push/subscribe",
+                }
+                is_account_route = request.url.path.startswith("/contas")
+                if not user.is_owner and request.url.path not in collaborator_paths and not is_account_route:
+                    return JSONResponse({"detail": "Colaboradores têm acesso somente ao Hub de contas."}, status_code=403)
+        except SQLAlchemyError:
+            logger.exception("Database unavailable while authorizing request")
+            return JSONResponse(
+                {"detail": "Banco de dados indisponível. Consulte a aba Logs ou /api/health/db."},
+                status_code=503,
+            )
     return await call_next(request)
 
 
@@ -323,7 +336,7 @@ async def startup_event() -> None:
 async def login_page():
     return HTMLResponse(
         """<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>Entrar · Auto-Wave</title><style>body{margin:0;background:#050505;color:#f5f5f5;font:16px Segoe UI;display:grid;place-items:center;min-height:100vh}form{width:min(360px,calc(100% - 40px));padding:28px;background:#111;border:1px solid #35205a;border-radius:18px;box-shadow:0 0 30px #8b5cf633}h1{margin-top:0}input,button{width:100%;padding:13px;margin:8px 0;border-radius:10px;border:1px solid #444;background:#080808;color:#fff;box-sizing:border-box}button{background:#8b5cf6;border:0;font-weight:700;cursor:pointer}#error{color:#f87171;min-height:22px}</style>
+        <title>Entrar · Auto-Wave</title><style>body{margin:0;background:radial-gradient(circle at top,#24113d,#050505 50%);color:#f5f5f5;font:16px Segoe UI;display:grid;place-items:center;min-height:100vh}form{width:min(360px,calc(100% - 40px));padding:28px;background:#111;border:1px solid #6037a0;border-radius:18px;box-shadow:0 0 30px #8b5cf633}h1{margin-top:0}input,button{width:100%;padding:13px;margin:8px 0;border-radius:10px;border:1px solid #444;background:#080808;color:#fff;box-sizing:border-box}input:focus{outline:2px solid #8b5cf6;border-color:#a855f7}button{background:#8b5cf6;border:0;font-weight:700;cursor:pointer}button:disabled{opacity:.65;cursor:wait}#error{margin-top:14px;padding:10px;border-radius:10px;color:#fecaca;background:#3b111c;border:1px solid #ef4444;min-height:22px}</style>
         <form id="login"><h1>Auto-Wave</h1><p>Acesse seu painel</p><input name="username" placeholder="Usuário" autocomplete="username" required><input name="password" type="password" placeholder="Senha" autocomplete="current-password" required><button>Entrar</button><p><a href="/cadastro" style="color:#c4b5fd">Criar uma conta</a></p><div id="error"></div></form>
         <script>document.querySelector('#login').onsubmit=async e=>{e.preventDefault();let f=new FormData(e.target),r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:f.get('username'),password:f.get('password')})});if(r.ok)location.href='/';else document.querySelector('#error').textContent=(await r.json()).detail||'Falha ao entrar'};</script></html>"""
     )
@@ -333,23 +346,28 @@ async def login_page():
 async def register_page():
     return HTMLResponse(
         """<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>Criar conta · Auto-Wave</title><style>body{margin:0;background:#050505;color:#f5f5f5;font:16px Segoe UI;display:grid;place-items:center;min-height:100vh}form{width:min(360px,calc(100% - 40px));padding:28px;background:#111;border:1px solid #35205a;border-radius:18px;box-shadow:0 0 30px #8b5cf633}h1{margin-top:0}input,button{width:100%;padding:13px;margin:8px 0;border-radius:10px;border:1px solid #444;background:#080808;color:#fff;box-sizing:border-box}button{background:#8b5cf6;border:0;font-weight:700;cursor:pointer}#error{color:#f87171;min-height:22px}</style>
-        <form id="register"><h1>Criar conta</h1><p>Sua conta será a proprietária do seu workspace.</p><input name="username" placeholder="Usuário" autocomplete="username" required minlength="3"><input name="password" type="password" placeholder="Senha (mínimo 8 caracteres)" autocomplete="new-password" required minlength="8"><button>Cadastrar e entrar</button><p><a href="/login" style="color:#c4b5fd">Já tenho uma conta</a></p><div id="error"></div></form>
-        <script>document.querySelector('#register').onsubmit=async e=>{e.preventDefault();let f=new FormData(e.target),r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:f.get('username'),password:f.get('password')})});if(r.ok)location.href='/';else document.querySelector('#error').textContent=(await r.json()).detail||'Falha no cadastro'};</script></html>"""
+        <title>Criar conta · Auto-Wave</title><style>body{margin:0;background:radial-gradient(circle at top,#24113d,#050505 50%);color:#f5f5f5;font:16px Segoe UI;display:grid;place-items:center;min-height:100vh}form{width:min(360px,calc(100% - 40px));padding:28px;background:#111;border:1px solid #6037a0;border-radius:18px;box-shadow:0 0 30px #8b5cf633}h1{margin-top:0}input,button{width:100%;padding:13px;margin:8px 0;border-radius:10px;border:1px solid #444;background:#080808;color:#fff;box-sizing:border-box}input:focus{outline:2px solid #8b5cf6;border-color:#a855f7}button{background:#8b5cf6;border:0;font-weight:700;cursor:pointer}button:disabled{opacity:.65;cursor:wait}#error{margin-top:14px;padding:10px;border-radius:10px;color:#fecaca;background:#3b111c;border:1px solid #ef4444;min-height:22px}</style>
+        <form id="register"><h1>Criar conta</h1><p>Sua conta será a proprietária do seu workspace.</p><input name="username" placeholder="Usuário" autocomplete="username" required><input name="password" type="password" placeholder="Senha" autocomplete="new-password" required><button>Cadastrar e entrar</button><p><a href="/login" style="color:#c4b5fd">Já tenho uma conta</a></p><div id="error"></div></form>
+        <script>document.querySelector('#register').onsubmit=async e=>{e.preventDefault();let b=e.target.querySelector('button'),f=new FormData(e.target),error=document.querySelector('#error');b.disabled=true;b.textContent='Criando...';error.textContent='';try{let r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:f.get('username'),password:f.get('password')})});let data=await r.json();if(r.ok)location.href='/';else error.textContent=data.detail||'Falha no cadastro'}catch(x){error.textContent='Não foi possível conectar ao servidor.'}finally{b.disabled=false;b.textContent='Cadastrar e entrar'}};</script></html>"""
     )
 
 
 @app.post("/api/auth/register")
 async def register(payload: RegisterPayload, response: Response, db: AsyncSession = Depends(session_dependency)):
     username = payload.username.strip()
-    if len(username) < 3 or len(payload.password) < 8:
-        raise HTTPException(status_code=422, detail="Usuário deve ter pelo menos 3 caracteres e senha pelo menos 8.")
+    if not username or not payload.password:
+        raise HTTPException(status_code=422, detail="Informe usuário e senha.")
     if await db.scalar(select(User).where(User.username == username)):
         raise HTTPException(status_code=409, detail="Esse usuário já existe.")
-    user = User(username=username, password_hash=password_hash(payload.password), is_owner=True)
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    try:
+        user = User(username=username, password_hash=password_hash(payload.password), is_owner=True)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.exception("Owner registration failed because database is unavailable")
+        raise HTTPException(status_code=503, detail="Não foi possível criar a conta porque o banco de dados está indisponível.") from exc
     response.set_cookie("auto_wave_session", auth_cookie(user.id), httponly=True, secure=True, samesite="lax", max_age=86400 * 7)
     return {"status": "ok", "role": "owner"}
 
@@ -383,8 +401,8 @@ async def create_collaborator(payload: CollaboratorPayload, request: Request, db
     if owner is None or not owner.is_owner:
         raise HTTPException(status_code=403, detail="Somente o proprietário pode criar colaboradores.")
     username = payload.username.strip()
-    if len(username) < 3 or len(payload.password) < 8:
-        raise HTTPException(status_code=422, detail="Usuário deve ter 3 caracteres e senha pelo menos 8.")
+    if not username or not payload.password:
+        raise HTTPException(status_code=422, detail="Informe usuário e senha.")
     if await db.scalar(select(User).where(User.username == username)):
         raise HTTPException(status_code=409, detail="Esse usuário já existe.")
     db.add(User(username=username, password_hash=password_hash(payload.password), is_owner=False, owner_id=owner.id))
