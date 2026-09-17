@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import DateTime, Float, JSON, String, func
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -60,9 +61,36 @@ class SharkbotEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./auto_wave.db")
+def build_database_url() -> tuple[str, dict]:
+    configured_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./auto_wave.db").strip()
+    if configured_url.startswith(("postgres://", "postgresql://")):
+        parsed = urlsplit(configured_url)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query.pop("sslmode", None)
+        query.pop("channel_binding", None)
+        database_url = urlunsplit(
+            (
+                "postgresql+asyncpg",
+                parsed.netloc,
+                parsed.path,
+                urlencode(query),
+                parsed.fragment,
+            )
+        )
+        return database_url, {"ssl": "require", "timeout": 15}
 
-engine = create_async_engine(DATABASE_URL, echo=False, future=True)
+    return configured_url, {}
+
+
+DATABASE_URL, ENGINE_CONNECT_ARGS = build_database_url()
+
+engine = create_async_engine(
+    DATABASE_URL,
+    connect_args=ENGINE_CONNECT_ARGS,
+    echo=False,
+    future=True,
+    pool_pre_ping=True,
+)
 AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 
