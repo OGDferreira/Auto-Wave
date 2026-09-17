@@ -489,7 +489,18 @@ testNotifyButton?.addEventListener('click', async () => {
 
 async function bootPanel() {
   try {
-    const user = await fetchJson('/api/auth/me');
+    const authResponse = await fetch('/api/auth/me', {
+      headers: { 'Cache-Control': 'no-cache' },
+      cache: 'no-store',
+    });
+    if (authResponse.status === 401) {
+      window.location.replace('/login');
+      return;
+    }
+    if (!authResponse.ok) {
+      throw new Error(`Falha ao validar a sessão (HTTP ${authResponse.status}).`);
+    }
+    const user = await authResponse.json();
     if (user.role === 'collaborator') {
       document.querySelectorAll('[data-page="dashboard"], [data-page="config"], [data-page="fila"], [data-page="logs"]').forEach((button) => button.remove());
       document.querySelector('.owner-only')?.remove();
@@ -504,7 +515,8 @@ async function bootPanel() {
     startLogsPolling();
     registerServiceWorker();
   } catch (error) {
-    window.location.href = '/login';
+    console.error('Falha ao iniciar o painel', error);
+    notify(error.message || 'Não foi possível iniciar o painel.', 'error');
   }
 }
 

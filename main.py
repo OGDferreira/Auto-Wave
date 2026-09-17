@@ -171,15 +171,19 @@ def auth_cookie(user_id: int) -> str:
 async def current_user(request: Request, db: AsyncSession) -> User | None:
     raw = request.cookies.get("auto_wave_session", "")
     user_id, separator, signature = raw.partition(".")
-    if not separator or not user_id or not hmac.compare_digest(
-        signature, hmac.new(AUTH_SECRET, user_id.encode(), hashlib.sha256).hexdigest()
-    ):
+    expected = hmac.new(AUTH_SECRET, user_id.encode(), hashlib.sha256).hexdigest() if user_id else ""
+    if not separator or not user_id or not hmac.compare_digest(signature, expected):
+        logger.warning("Session rejected: missing or invalid auto_wave_session cookie")
         return None
     try:
         user = await db.get(User, int(user_id))
     except (ValueError, TypeError):
+        logger.warning("Session rejected: invalid user id in cookie")
         return None
-    return user if user and user.active else None
+    if user is None or not user.active:
+        logger.warning("Session rejected: user not found or inactive (id=%s)", user_id)
+        return None
+    return user
 
 
 def owner_id_for(user: User) -> int:
