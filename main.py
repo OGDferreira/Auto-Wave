@@ -6,14 +6,16 @@ import logging
 import os
 import secrets
 import time
+import base64
+import binascii
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -28,7 +30,10 @@ from models import (
     ScheduledPost,
     SharkbotEvent,
     SystemConfig,
+    User,
     init_db,
+    database_target,
+    engine,
     session_dependency,
 )
 
@@ -48,6 +53,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+@app.middleware("http")
+async def require_panel_login(request: Request, call_next):
+    if request.url.path.startswith("/api/") and request.url.path not in {"/api/auth/login", "/api/health/db"}:
+        async with AsyncSessionLocal() as db:
+            if await current_user(request, db) is None:
+                return JSONResponse({"detail": "Faça login para acessar o painel."}, status_code=401)
+    return await call_next(request)
+
+
 class ConfigPayload(BaseModel):
     meta_app_id: str = ""
     meta_app_secret: str = ""
@@ -63,6 +77,16 @@ class SchedulePayload(BaseModel):
     scheduled_for: datetime
 
 
+class LoginPayload(BaseModel):
+    username: str
+    password: str
+
+
+class CollaboratorPayload(BaseModel):
+    username: str
+    password: str
+
+
 META_GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v21.0")
 META_REDIRECT_URI = os.getenv(
     "META_REDIRECT_URI",
@@ -76,6 +100,44 @@ META_SCOPES = [
 RENDER_API_BASE_URL = os.getenv("RENDER_API_BASE_URL", "https://api.render.com/v1").rstrip("/")
 RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID", "").strip()
 RENDER_API_KEY = os.getenv("RENDER_API_KEY", "").strip()
+AUTH_SECRET = os.getenv("AUTH_SECRET", "auto-wave-change-this-secret").encode()
+
+
+def password_hash(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    derived = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
+    return f"scrypt${base64.urlsafe_b64encode(salt).decode()}${base64.urlsafe_b64encode(derived).decode()}"
+
+
+def password_matches(password: str, encoded: str) -> bool:
+    try:
+        _, salt_text, digest_text = encoded.split("$", 2)
+        salt = base64.urlsafe_b64decode(salt_text.encode())
+        expected = base64.urlsafe_b64decode(digest_text.encode())
+        actual = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
+        return hmac.compare_digest(actual, expected)
+    except (ValueError, binascii.Error):
+        return False
+
+
+def auth_cookie(user_id: int) -> str:
+    value = str(user_id)
+    signature = hmac.new(AUTH_SECRET, value.encode(), hashlib.sha256).hexdigest()
+    return f"{value}.{signature}"
+
+
+async def current_user(request: Request, db: AsyncSession) -> User | None:
+    raw = request.cookies.get("auto_wave_session", "")
+    user_id, separator, signature = raw.partition(".")
+    if not separator or not user_id or not hmac.compare_digest(
+        signature, hmac.new(AUTH_SECRET, user_id.encode(), hashlib.sha256).hexdigest()
+    ):
+        return None
+    try:
+        user = await db.get(User, int(user_id))
+    except (ValueError, TypeError):
+        return None
+    return user if user and user.active else None
 
 
 def serialize_config(config: SystemConfig) -> dict[str, str]:
@@ -205,9 +267,65 @@ async def run_playwright_login(account_id: int) -> None:
 async def startup_event() -> None:
     try:
         await init_db()
+        async with AsyncSessionLocal() as db:
+            owner_username = os.getenv("ADMIN_USERNAME", "").strip()
+            owner_password = os.getenv("ADMIN_PASSWORD", "")
+            if owner_username and owner_password:
+                existing = await db.scalar(select(User).where(User.username == owner_username))
+                if existing is None:
+                    db.add(User(username=owner_username, password_hash=password_hash(owner_password), is_owner=True))
+                    await db.commit()
         logger.info("Database initialized successfully")
     except Exception:
         logger.exception("Database initialization failed; application started without database access")
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    return HTMLResponse(
+        """<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Entrar · Auto-Wave</title><style>body{margin:0;background:#050505;color:#f5f5f5;font:16px Segoe UI;display:grid;place-items:center;min-height:100vh}form{width:min(360px,calc(100% - 40px));padding:28px;background:#111;border:1px solid #35205a;border-radius:18px;box-shadow:0 0 30px #8b5cf633}h1{margin-top:0}input,button{width:100%;padding:13px;margin:8px 0;border-radius:10px;border:1px solid #444;background:#080808;color:#fff;box-sizing:border-box}button{background:#8b5cf6;border:0;font-weight:700;cursor:pointer}#error{color:#f87171;min-height:22px}</style>
+        <form id="login"><h1>Auto-Wave</h1><p>Acesse seu painel</p><input name="username" placeholder="Usuário" autocomplete="username" required><input name="password" type="password" placeholder="Senha" autocomplete="current-password" required><button>Entrar</button><div id="error"></div></form>
+        <script>document.querySelector('#login').onsubmit=async e=>{e.preventDefault();let f=new FormData(e.target),r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:f.get('username'),password:f.get('password')})});if(r.ok)location.href='/';else document.querySelector('#error').textContent=(await r.json()).detail||'Falha ao entrar'};</script></html>"""
+    )
+
+
+@app.post("/api/auth/login")
+async def login(payload: LoginPayload, response: Response, db: AsyncSession = Depends(session_dependency)):
+    user = await db.scalar(select(User).where(User.username == payload.username.strip()))
+    if user is None or not password_matches(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Usuário ou senha inválidos.")
+    response.set_cookie("auto_wave_session", auth_cookie(user.id), httponly=True, secure=True, samesite="lax", max_age=86400 * 7)
+    return {"status": "ok", "role": "owner" if user.is_owner else "collaborator"}
+
+
+@app.post("/api/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie("auto_wave_session")
+    return {"status": "ok"}
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await current_user(request, db)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Faça login.")
+    return {"username": user.username, "role": "owner" if user.is_owner else "collaborator"}
+
+
+@app.post("/api/auth/collaborators")
+async def create_collaborator(payload: CollaboratorPayload, request: Request, db: AsyncSession = Depends(session_dependency)):
+    owner = await current_user(request, db)
+    if owner is None or not owner.is_owner:
+        raise HTTPException(status_code=403, detail="Somente o proprietário pode criar colaboradores.")
+    username = payload.username.strip()
+    if len(username) < 3 or len(payload.password) < 8:
+        raise HTTPException(status_code=422, detail="Usuário deve ter 3 caracteres e senha pelo menos 8.")
+    if await db.scalar(select(User).where(User.username == username)):
+        raise HTTPException(status_code=409, detail="Esse usuário já existe.")
+    db.add(User(username=username, password_hash=password_hash(payload.password), is_owner=False))
+    await db.commit()
+    return {"status": "ok", "username": username}
 
 
 @app.get("/")
@@ -248,6 +366,25 @@ async def get_config(db: AsyncSession = Depends(session_dependency)):
         "vapid_public_key": config.vapid_public_key,
         "vapid_private_key": config.vapid_private_key,
     }
+
+
+@app.get("/api/health/db")
+async def database_health():
+    try:
+        async with engine.connect() as connection:
+            await connection.run_sync(lambda sync_connection: sync_connection.exec_driver_sql("SELECT 1"))
+        return {"status": "ok", "database": database_target()}
+    except Exception as exc:
+        logger.exception("Database health check failed")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "database": database_target(),
+                "message": "Não foi possível conectar ao PostgreSQL. Verifique host, porta, senha e acesso de rede do Supabase.",
+                "error_type": type(exc).__name__,
+            },
+        )
 
 
 @app.post("/api/config")

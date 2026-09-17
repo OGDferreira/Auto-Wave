@@ -3,7 +3,7 @@ import socket
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
-from sqlalchemy import DateTime, Float, JSON, String, func
+from sqlalchemy import Boolean, DateTime, Float, JSON, String, func
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -27,6 +27,17 @@ class SystemConfig(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_owner: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Account(Base):
@@ -114,6 +125,16 @@ AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+def database_target() -> dict[str, str]:
+    parsed = urlsplit(DATABASE_URL)
+    return {
+        "driver": parsed.scheme,
+        "host": parsed.hostname or "",
+        "port": str(parsed.port or ""),
+        "database": parsed.path.lstrip("/") or "",
+    }
 
 
 async def session_dependency():

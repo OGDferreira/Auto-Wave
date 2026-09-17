@@ -1,7 +1,9 @@
 const pageButtons = document.querySelectorAll('.nav-button');
 const pages = document.querySelectorAll('.page');
 const notifyButton = document.getElementById('notify-button');
+const testNotifyButton = document.getElementById('test-notify-button');
 const configForm = document.getElementById('config-form');
+const collaboratorForm = document.getElementById('collaborator-form');
 const importForm = document.getElementById('import-form');
 const contasList = document.getElementById('contas-list');
 const refreshAccountsButton = document.getElementById('refresh-accounts');
@@ -296,6 +298,23 @@ configForm?.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify(body),
     });
+
+    collaboratorForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        await fetchJson('/api/auth/collaborators', {
+          method: 'POST',
+          body: JSON.stringify({
+            username: document.getElementById('collaborator-username').value,
+            password: document.getElementById('collaborator-password').value,
+          }),
+        });
+        collaboratorForm.reset();
+        notify('Colaborador criado com sucesso.', 'success');
+      } catch (error) {
+        notify(error.message || 'Não foi possível criar o colaborador.', 'error');
+      }
+    });
     notify('Configuração salva com sucesso.', 'success');
   } catch (error) {
     console.error(error);
@@ -411,15 +430,43 @@ async function enablePushNotifications() {
 
 notifyButton?.addEventListener('click', enablePushNotifications);
 
-if (window.__INITIAL_METRICS__) {
-  updateMetrics(window.__INITIAL_METRICS__);
+testNotifyButton?.addEventListener('click', async () => {
+  testNotifyButton.disabled = true;
+  try {
+    await fetchJson('/api/push/send', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'Auto-Wave',
+        body: 'Esta é uma notificação de teste do seu painel.',
+      }),
+    });
+    notify('Notificação de teste enviada.', 'success');
+  } catch (error) {
+    notify(error.message || 'Não foi possível enviar a notificação de teste.', 'error');
+  } finally {
+    testNotifyButton.disabled = false;
+  }
+});
+
+async function bootPanel() {
+  try {
+    const user = await fetchJson('/api/auth/me');
+    if (user.role === 'collaborator') {
+      document.querySelectorAll('[data-page="dashboard"], [data-page="config"], [data-page="fila"], [data-page="logs"]').forEach((button) => button.remove());
+      document.querySelector('.owner-only')?.remove();
+    }
+    if (window.__INITIAL_METRICS__) updateMetrics(window.__INITIAL_METRICS__);
+    const savedPage = window.location.hash.replace('#', '') || window.localStorage.getItem('auto-wave-page') || window.__INITIAL_PAGE__ || 'dashboard';
+    showPage(user.role === 'collaborator' ? 'contas' : savedPage);
+    loadMetrics();
+    loadConfig();
+    loadAccounts();
+    loadQueue();
+    startLogsPolling();
+    registerServiceWorker();
+  } catch (error) {
+    window.location.href = '/login';
+  }
 }
 
-const savedPage = window.location.hash.replace('#', '') || window.localStorage.getItem('auto-wave-page') || window.__INITIAL_PAGE__ || 'dashboard';
-showPage(savedPage);
-loadMetrics();
-loadConfig();
-loadAccounts();
-loadQueue();
-startLogsPolling();
-registerServiceWorker();
+bootPanel();

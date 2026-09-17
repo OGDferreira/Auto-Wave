@@ -40,7 +40,10 @@
               <p class="eyebrow">Overview</p>
               <h2>Dashboard</h2>
             </div>
-            <button id="notify-button" class="primary-btn">Ativar notificações</button>
+            <div class="header-actions">
+              <button id="notify-button" class="primary-btn" type="button">Ativar notificações</button>
+              <button id="test-notify-button" class="secondary-btn" type="button">Testar notificação</button>
+            </div>
           </header>
 
           <div class="stats-grid">
@@ -161,6 +164,14 @@
             <div class="form-actions">
               <button type="submit" class="primary-btn">Salvar chaves</button>
             </div>
+          </form>
+          <form id="collaborator-form" class="config-form glass-panel owner-only">
+            <div class="panel-head"><p class="eyebrow">Equipe</p><h3>Criar colaborador</h3><span class="page-subtitle">Colaboradores acessam somente o Hub de contas.</span></div>
+            <div class="field-grid">
+              <label><span>Usuário</span><input id="collaborator-username" required minlength="3" /></label>
+              <label><span>Senha</span><input id="collaborator-password" type="password" required minlength="8" /></label>
+            </div>
+            <div class="form-actions"><button class="secondary-btn" type="submit">Criar acesso</button></div>
           </form>
         </section>
 
