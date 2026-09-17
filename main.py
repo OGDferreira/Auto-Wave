@@ -116,6 +116,26 @@ class SchedulePayload(BaseModel):
     media_url: str
     caption: str = ""
     scheduled_for: datetime
+    thumbnail_url: str = ""
+    media_type: str = "IMAGE"
+
+
+class MediaItemPayload(BaseModel):
+    media_url: str
+    caption: str = ""
+    thumbnail_url: str = ""
+    media_type: str = "IMAGE"
+    order_index: int = 0
+
+
+class BulkSchedulePayload(BaseModel):
+    account_ids: list[int]
+    media: list[MediaItemPayload]
+    caption_mode: str = "global"
+    global_caption: str = ""
+    interval_minutes: int = 1
+    first_scheduled_for: datetime | None = None
+    publish_now: bool = False
 
 
 MAX_MEDIA_SIZE = 100 * 1024 * 1024
@@ -267,7 +287,7 @@ async def upload_media(
             content,
             file_options={"content-type": content_type, "upsert": False},
         )
-        signed = client.storage.from_(MEDIA_BUCKET).create_signed_url(path, 60 * 60 * 24 * 7)
+        signed = client.storage.from_(MEDIA_BUCKET).create_signed_url(path, 60 * 60 * 24 * 365)
         if isinstance(signed, dict):
             nested = signed.get("data") if isinstance(signed.get("data"), dict) else {}
             return str(signed.get("signedURL") or signed.get("signedUrl") or nested.get("signedUrl") or "")
@@ -299,6 +319,13 @@ async def get_dashboard_metrics(db: AsyncSession) -> dict[str, Any]:
     pix_gerado = int(metric_map.get("pix_gerado", {}).get("count", 0))
     pix_pago = int(metric_map.get("pix_pago", {}).get("count", 0))
     valor_total = float(sum(item["valor"] for item in metric_map.values()))
+    today = datetime.now().date()
+    posts_today = await db.scalar(
+        select(func.count(ScheduledPost.id)).where(func.date(ScheduledPost.created_at) == today)
+    ) or 0
+    published = await db.scalar(
+        select(func.count(ScheduledPost.id)).where(ScheduledPost.status == "publicado")
+    ) or 0
 
     def safe_rate(part: float, total: float) -> float:
         if total in (None, 0):
@@ -316,6 +343,9 @@ async def get_dashboard_metrics(db: AsyncSession) -> dict[str, Any]:
         "pix_rate": safe_rate(pix_pago, pix_gerado),
         "overall_conversion": safe_rate(leads_total, views_total),
         "accounts_total": await db.scalar(select(func.count(Account.id))) or 0,
+        "accounts_active": await db.scalar(select(func.count(Account.id)).where(Account.status == "conectada")) or 0,
+        "posts_today": int(posts_today),
+        "published": int(published),
     }
 
 
@@ -815,6 +845,9 @@ async def list_scheduled_posts(request: Request, db: AsyncSession = Depends(sess
             "account_id": row.account_id,
             "media_url": row.media_url,
             "caption": row.caption,
+            "thumbnail_url": row.thumbnail_url or row.media_url,
+            "media_type": row.media_type or "IMAGE",
+            "order_index": row.order_index or 0,
             "scheduled_for": row.scheduled_for.isoformat(),
             "status": row.status,
         }
@@ -833,14 +866,53 @@ async def schedule_post(payload: SchedulePayload, request: Request, db: AsyncSes
 
     post = ScheduledPost(
         account_id=payload.account_id,
+        owner_id=owner_id_for(user),
         media_url=payload.media_url.strip(),
         caption=payload.caption.strip(),
+        thumbnail_url=payload.thumbnail_url.strip(),
+        media_type=payload.media_type.upper(),
         scheduled_for=payload.scheduled_for,
     )
     db.add(post)
     await db.commit()
     await db.refresh(post)
     return {"status": "ok", "id": post.id}
+
+
+@app.post("/api/fila/agendar-massa")
+async def schedule_bulk(payload: BulkSchedulePayload, request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await require_user(request, db)
+    owner_id = owner_id_for(user)
+    if not payload.account_ids or not payload.media:
+        raise HTTPException(status_code=422, detail="Selecione pelo menos uma conta e uma mídia.")
+    if payload.interval_minutes < 1:
+        raise HTTPException(status_code=422, detail="O intervalo mínimo é de 1 minuto.")
+    accounts = (await db.execute(select(Account).where(Account.id.in_(payload.account_ids), Account.owner_id == owner_id))).scalars().all()
+    if len(accounts) != len(set(payload.account_ids)):
+        raise HTTPException(status_code=404, detail="Uma das contas selecionadas não pertence a este workspace.")
+    from datetime import timedelta, timezone
+    now = datetime.now(timezone.utc)
+    first = now if payload.publish_now else (payload.first_scheduled_for or now + timedelta(minutes=5))
+    if not payload.publish_now and first < now + timedelta(minutes=5):
+        first = now + timedelta(minutes=5)
+    created = 0
+    for account_index, account in enumerate(accounts):
+        for media_index, item in enumerate(sorted(payload.media, key=lambda media: media.order_index)):
+            when = first + timedelta(minutes=payload.interval_minutes * (account_index * len(payload.media) + media_index))
+            caption = item.caption if payload.caption_mode == "per_media" else payload.global_caption
+            db.add(ScheduledPost(
+                account_id=account.id,
+                owner_id=owner_id,
+                media_url=item.media_url.strip(),
+                caption=caption.strip(),
+                thumbnail_url=item.thumbnail_url.strip() or item.media_url.strip(),
+                media_type=item.media_type.upper(),
+                order_index=media_index,
+                scheduled_for=when,
+            ))
+            created += 1
+    await db.commit()
+    return {"status": "ok", "created": created, "scheduled_from": first.isoformat()}
 
 
 @app.delete("/api/fila/{post_id}")

@@ -15,6 +15,20 @@ const scheduleMedia = document.getElementById('schedule-media');
 const scheduleFile = document.getElementById('schedule-file');
 const mediaUploadStatus = document.getElementById('media-upload-status');
 const mediaPreview = document.getElementById('media-preview');
+const scheduleAccounts = document.getElementById('schedule-accounts');
+const mediaItems = document.getElementById('media-items');
+const scheduleSelectAll = document.getElementById('schedule-select-all');
+const scheduleNow = document.getElementById('schedule-now');
+const scheduleDate = document.getElementById('schedule-date');
+const scheduleDateField = document.getElementById('schedule-date-field');
+const minimumTimeHint = document.getElementById('minimum-time-hint');
+const hidePreviews = document.getElementById('hide-previews');
+const userMenuButton = document.getElementById('user-menu-button');
+const userMenuPanel = document.getElementById('user-menu-panel');
+const currentUsername = document.getElementById('current-username');
+const userMenuName = document.getElementById('user-menu-name');
+const openCollaboratorButton = document.getElementById('open-collaborator-button');
+const logoutButton = document.getElementById('logout-button');
 const queueList = document.getElementById('fila-list');
 const queueCount = document.getElementById('queue-count');
 const calendarStrip = document.getElementById('calendar-strip');
@@ -27,6 +41,67 @@ let accountPollingTimer;
 let logsPollingTimer;
 let queuePostsCache = [];
 let queueSelectedDay = null;
+let importedMedia = [];
+
+function minimumScheduleDate() {
+  return new Date(Date.now() + 5 * 60 * 1000);
+}
+
+function setMinimumScheduleTime() {
+  if (!scheduleDate || !minimumTimeHint) return;
+  const minimum = minimumScheduleDate();
+  const local = new Date(minimum.getTime() - minimum.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  scheduleDate.min = local;
+  if (!scheduleDate.value || scheduleDate.value < local) scheduleDate.value = local;
+  minimumTimeHint.textContent = `Horário mínimo permitido: ${minimum.toLocaleString('pt-BR')}.`;
+}
+
+function renderMediaItems() {
+  if (!mediaItems) return;
+  mediaItems.innerHTML = importedMedia.map((item, index) => `
+    <article class="media-item" draggable="true" data-media-index="${index}">
+      <div class="media-item-preview ${hidePreviews?.checked ? 'is-censored' : ''}">${item.media_type === 'VIDEO'
+        ? `<video src="${item.media_url}" muted></video>`
+        : `<img src="${item.media_url}" alt="Miniatura ${index + 1}" />`}
+      </div>
+      <div class="media-item-info"><strong>${item.name || `Mídia ${index + 1}`}</strong><small>${item.media_type} · ordem ${index + 1}</small>
+        <input class="thumbnail-input" data-index="${index}" type="url" value="${item.thumbnail_url || ''}" placeholder="URL da thumbnail (opcional)" />
+        <input class="caption-input" data-index="${index}" type="text" value="${item.caption || ''}" placeholder="Legenda desta mídia" /></div>
+      <button class="remove-media-button" data-index="${index}" type="button" aria-label="Remover mídia">×</button>
+    </article>`).join('');
+  mediaItems.querySelectorAll('.remove-media-button').forEach((button) => button.addEventListener('click', () => {
+    importedMedia.splice(Number(button.dataset.index), 1);
+    renderMediaItems();
+  }));
+  mediaItems.querySelectorAll('.caption-input').forEach((input) => input.addEventListener('input', () => {
+    importedMedia[Number(input.dataset.index)].caption = input.value;
+  }));
+  mediaItems.querySelectorAll('.thumbnail-input').forEach((input) => input.addEventListener('input', () => {
+    importedMedia[Number(input.dataset.index)].thumbnail_url = input.value;
+  }));
+  mediaItems.querySelectorAll('.media-item').forEach((card) => {
+    card.addEventListener('dragstart', (event) => event.dataTransfer.setData('text/plain', card.dataset.mediaIndex));
+    card.addEventListener('dragover', (event) => event.preventDefault());
+    card.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const from = Number(event.dataTransfer.getData('text/plain'));
+      const to = Number(card.dataset.mediaIndex);
+      const [moved] = importedMedia.splice(from, 1);
+      importedMedia.splice(to, 0, moved);
+      renderMediaItems();
+    });
+  });
+}
+
+scheduleSelectAll?.addEventListener('change', () => {
+  scheduleAccounts?.querySelectorAll('input[type="checkbox"]').forEach((input) => { input.checked = scheduleSelectAll.checked; });
+});
+hidePreviews?.addEventListener('change', renderMediaItems);
+scheduleNow?.addEventListener('change', () => {
+  if (scheduleDateField) scheduleDateField.hidden = scheduleNow.checked;
+  if (scheduleDate) scheduleDate.required = !scheduleNow.checked;
+});
+setMinimumScheduleTime();
 
 scheduleMedia?.addEventListener('input', () => {
   const value = scheduleMedia.value.trim();
@@ -97,6 +172,12 @@ function updateMetrics(metrics) {
     'metric-leads': metrics.leads_total || 0,
     'metric-lead-rate': `${metrics.lead_rate || 0}%`,
     'metric-pix': metrics.pix_pago || 0,
+    'metric-accounts': metrics.accounts_active ?? metrics.accounts_total ?? 0,
+    'metric-posts-today': metrics.posts_today || 0,
+    'metric-published': metrics.published || 0,
+    'metric-leads-sharkbot': metrics.lead_events || metrics.leads_total || 0,
+    'metric-pix-generated': metrics.pix_gerado || 0,
+    'metric-pix-paid': metrics.pix_pago || 0,
     'conversion-overall': `${metrics.overall_conversion || 0}%`,
     'conversion-pix': `${metrics.pix_rate || 0}%`,
     'valor-total': new Intl.NumberFormat('pt-BR', {
@@ -252,37 +333,43 @@ async function loadAccounts() {
       queueAccountFilter.innerHTML = '<option value="all">Todas as contas</option>' +
         accounts.map((account) => `<option value="${account.id}">${account.username}</option>`).join('');
     }
-
-    scheduleFile?.addEventListener('change', async () => {
-      const file = scheduleFile.files?.[0];
-      if (!file) return;
-      mediaUploadStatus.textContent = 'Enviando mídia para o Storage…';
-      mediaUploadStatus.className = 'media-upload-status is-loading';
-      try {
-        const formData = new FormData();
-        formData.append('media', file);
-        const response = await fetch('/api/media/upload', { method: 'POST', body: formData });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.detail || 'Não foi possível enviar a mídia.');
-        scheduleMedia.value = payload.url;
-        scheduleMedia.dispatchEvent(new Event('input'));
-        mediaUploadStatus.textContent = `${file.name} importado com sucesso.`;
-        mediaUploadStatus.className = 'media-upload-status is-success';
-      } catch (error) {
-        mediaUploadStatus.textContent = error.message || 'Falha ao importar a mídia.';
-        mediaUploadStatus.className = 'media-upload-status is-error';
-      }
-    });
+    if (scheduleAccounts) {
+      scheduleAccounts.innerHTML = accounts.map((account) => `<label class="schedule-account-option"><input type="checkbox" value="${account.id}" /><span class="account-mini-avatar">${String(account.username).replace(/^@/, '').slice(0, 1).toUpperCase()}</span><strong>@${String(account.username).replace(/^@/, '')}</strong></label>`).join('');
+    }
     if (scheduleAccount) {
       scheduleAccount.innerHTML = accounts.length
         ? accounts.map((account) => `<option value="${account.id}">${account.username} · ${account.status}</option>`).join('')
         : '<option value="">Nenhuma conta disponível</option>';
     }
+
   } catch (error) {
     notify('Não foi possível carregar as contas. Verifique o banco de dados.', 'error');
   }
 
 }
+
+scheduleFile?.addEventListener('change', async () => {
+  const files = [...(scheduleFile.files || [])];
+  if (!files.length) return;
+  mediaUploadStatus.textContent = `Enviando ${files.length} mídia(s)…`;
+  mediaUploadStatus.className = 'media-upload-status is-loading';
+  for (const file of files) {
+    try {
+      const formData = new FormData();
+      formData.append('media', file);
+      const response = await fetch('/api/media/upload', { method: 'POST', body: formData });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Falha no upload.');
+      importedMedia.push({ ...payload, name: file.name, thumbnail_url: payload.url, caption: '' });
+    } catch (error) {
+      notify(`${file.name}: ${error.message}`, 'error');
+    }
+  }
+  renderMediaItems();
+  mediaUploadStatus.textContent = `${importedMedia.length} mídia(s) importada(s). Arraste para reordenar.`;
+  mediaUploadStatus.className = 'media-upload-status is-success';
+  scheduleFile.value = '';
+});
 
 function renderQueue(posts) {
     if (!queueList) return;
@@ -298,7 +385,10 @@ function renderQueue(posts) {
       queueList.innerHTML = visiblePosts.map((post) => {
         const date = new Date(post.scheduled_for);
         const account = accountsCache.find((item) => item.id === post.account_id);
-        return `<article class="queue-card"><div class="queue-thumb">▧</div><div class="queue-card-body"><strong>${account?.username || `Conta #${post.account_id}`}</strong><span>${date.toLocaleString('pt-BR')}</span><small>${post.caption || 'Sem legenda'}</small></div><span class="status-chip">${post.status}</span><button class="queue-delete" data-post-id="${post.id}" type="button">×</button></article>`;
+        const thumb = post.media_type === 'VIDEO'
+          ? `<video src="${post.thumbnail_url || post.media_url}" muted></video>`
+          : `<img src="${post.thumbnail_url || post.media_url}" alt="Miniatura da publicação" />`;
+        return `<article class="queue-card"><div class="queue-thumb ${hidePreviews?.checked ? 'is-censored' : ''}">${thumb}</div><div class="queue-card-body"><strong>${account?.username || `Conta #${post.account_id}`}</strong><span>${date.toLocaleString('pt-BR')}</span><small>${post.caption || 'Sem legenda'}</small></div><span class="status-chip">${post.status}</span><button class="queue-delete" data-post-id="${post.id}" type="button">×</button></article>`;
       }).join('');
       queueList.querySelectorAll('.queue-delete').forEach((button) => {
         button.addEventListener('click', async () => {
@@ -353,20 +443,28 @@ queueAllButton?.addEventListener('click', () => {
 scheduleForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
-      await fetchJson('/api/fila/agendar', {
+      const accountIds = [...(scheduleAccounts?.querySelectorAll('input:checked') || [])].map((input) => Number(input.value));
+      if (!accountIds.length || !importedMedia.length) throw new Error('Selecione contas e importe pelo menos uma mídia.');
+      await fetchJson('/api/fila/agendar-massa', {
         method: 'POST',
         body: JSON.stringify({
-          account_id: Number(scheduleAccount.value),
-          media_url: document.getElementById('schedule-media').value,
-          caption: document.getElementById('schedule-caption').value,
-          scheduled_for: new Date(document.getElementById('schedule-date').value).toISOString(),
+          account_ids: accountIds,
+          media: importedMedia.map((item, index) => ({ ...item, order_index: index })),
+          caption_mode: document.querySelector('input[name="caption-mode"]:checked')?.value || 'global',
+          global_caption: document.getElementById('schedule-caption').value,
+          interval_minutes: Number(document.getElementById('schedule-interval').value || 1),
+          first_scheduled_for: scheduleNow?.checked ? null : new Date(scheduleDate.value).toISOString(),
+          publish_now: Boolean(scheduleNow?.checked),
         }),
       });
       scheduleForm.reset();
+      importedMedia = [];
+      renderMediaItems();
+      setMinimumScheduleTime();
       notify('Publicação adicionada à fila.', 'success');
       loadQueue();
     } catch (error) {
-      notify('Preencha conta, mídia e horário corretamente.', 'error');
+      notify(error.message || 'Preencha conta, mídia e horário corretamente.', 'error');
     }
 });
 
@@ -529,6 +627,21 @@ async function enablePushNotifications() {
 
 notifyButton?.addEventListener('click', enablePushNotifications);
 
+userMenuButton?.addEventListener('click', () => {
+  const open = userMenuPanel.hidden;
+  userMenuPanel.hidden = !open;
+  userMenuButton.setAttribute('aria-expanded', String(open));
+});
+openCollaboratorButton?.addEventListener('click', () => {
+  userMenuPanel.hidden = true;
+  showPage('config');
+  document.getElementById('collaborator-username')?.focus();
+});
+logoutButton?.addEventListener('click', async () => {
+  await fetchJson('/api/auth/logout', { method: 'POST' });
+  window.location.replace('/login');
+});
+
 testNotifyButton?.addEventListener('click', async () => {
   testNotifyButton.disabled = true;
   try {
@@ -561,13 +674,15 @@ async function bootPanel() {
       throw new Error(`Falha ao validar a sessão (HTTP ${authResponse.status}). Tente atualizar novamente.`);
     }
     const user = await authResponse.json();
+    if (currentUsername) currentUsername.textContent = user.username;
+    if (userMenuName) userMenuName.textContent = user.username;
     if (user.role === 'collaborator') {
       document.querySelectorAll('[data-page="dashboard"], [data-page="config"], [data-page="fila"], [data-page="logs"]').forEach((button) => button.remove());
       document.querySelector('.owner-only')?.remove();
+      openCollaboratorButton?.remove();
     }
     if (window.__INITIAL_METRICS__) updateMetrics(window.__INITIAL_METRICS__);
-    const savedPage = window.location.hash.replace('#', '') || window.localStorage.getItem('auto-wave-page') || window.__INITIAL_PAGE__ || 'dashboard';
-    showPage(user.role === 'collaborator' ? 'contas' : savedPage);
+    showPage(user.role === 'collaborator' ? 'contas' : 'dashboard');
     loadMetrics();
     loadConfig();
     loadAccounts();

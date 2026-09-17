@@ -81,8 +81,12 @@ class ScheduledPost(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     account_id: Mapped[int] = mapped_column(nullable=False, index=True)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     media_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     caption: Mapped[str] = mapped_column(String(2200), nullable=True, default="")
+    thumbnail_url: Mapped[str] = mapped_column(String(1000), nullable=True, default="")
+    media_type: Mapped[str] = mapped_column(String(30), nullable=False, default="IMAGE")
+    order_index: Mapped[int] = mapped_column(default=0)
     scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="agendado")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -131,14 +135,25 @@ async def init_db() -> None:
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id)"))
             await conn.execute(text("ALTER TABLE system_config ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id)"))
             await conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id)"))
+            await conn.execute(text("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id)"))
+            await conn.execute(text("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS thumbnail_url VARCHAR(1000)"))
+            await conn.execute(text("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS media_type VARCHAR(30) DEFAULT 'IMAGE'"))
+            await conn.execute(text("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0"))
         else:
-            for table in ("users", "system_config", "accounts"):
+            for table in ("users", "system_config", "accounts", "scheduled_posts"):
                 columns = {
                     row[1]
                     for row in (await conn.exec_driver_sql(f"PRAGMA table_info({table})")).all()
                 }
                 if "owner_id" not in columns:
                     await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN owner_id INTEGER"))
+            scheduled_columns = {
+                row[1]
+                for row in (await conn.exec_driver_sql("PRAGMA table_info(scheduled_posts)")).all()
+            }
+            for name, sql_type in (("thumbnail_url", "TEXT"), ("media_type", "TEXT"), ("order_index", "INTEGER")):
+                if name not in scheduled_columns:
+                    await conn.execute(text(f"ALTER TABLE scheduled_posts ADD COLUMN {name} {sql_type}"))
 
 
 def database_target() -> dict[str, str]:

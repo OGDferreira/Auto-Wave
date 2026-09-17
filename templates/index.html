@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#050505" />
     <title>Auto-Wave</title>
     <link rel="manifest" href="/static/manifest.json" />
-    <link rel="stylesheet" href="/static/style.css?v=20260917-4" />
+    <link rel="stylesheet" href="/static/style.css?v=20260917-6" />
   </head>
   <body>
     <div id="toast-region" class="toast-region" aria-live="polite"></div>
@@ -34,6 +34,17 @@
       </aside>
 
       <main class="main-panel">
+        <header class="topbar">
+          <div class="topbar-spacer"></div>
+          <div class="user-menu">
+            <button id="user-menu-button" class="user-menu-button" type="button" aria-expanded="false"><span class="user-avatar">♙</span><span id="current-username">Usuário</span><span>⌄</span></button>
+            <div id="user-menu-panel" class="user-menu-panel" hidden>
+              <strong id="user-menu-name">Usuário</strong>
+              <button id="open-collaborator-button" type="button">＋ Adicionar colaborador</button>
+              <button id="logout-button" type="button">Sair</button>
+            </div>
+          </div>
+        </header>
         <section id="page-dashboard" class="page active">
           <header class="page-header">
             <div>
@@ -60,8 +71,34 @@
               <strong id="metric-lead-rate">0%</strong>
             </article>
             <article class="stat-card">
-              <span>Vendas / Pix</span>
-              <strong id="metric-pix">0</strong>
+              <span>Contas ativas</span>
+              <strong id="metric-accounts">0</strong>
+              <small>conectadas ao workspace</small>
+            </article>
+            <article class="stat-card">
+              <span>Posts hoje</span>
+              <strong id="metric-posts-today">0</strong>
+              <small>publicações criadas</small>
+            </article>
+            <article class="stat-card">
+              <span>Publicados</span>
+              <strong id="metric-published">0</strong>
+              <small>concluídos com sucesso</small>
+            </article>
+            <article class="stat-card">
+              <span>Leads Sharkbot</span>
+              <strong id="metric-leads-sharkbot">0</strong>
+              <small>eventos recebidos</small>
+            </article>
+            <article class="stat-card">
+              <span>Pix gerados</span>
+              <strong id="metric-pix-generated">0</strong>
+              <small>pagamentos criados</small>
+            </article>
+            <article class="stat-card">
+              <span>Pix pagos</span>
+              <strong id="metric-pix-paid">0</strong>
+              <small>pagamentos aprovados</small>
             </article>
           </div>
 
@@ -190,20 +227,20 @@
                 <p class="eyebrow">Novo agendamento</p>
                 <h3>Postagem programada</h3>
               </div>
-              <label><span>Conta de destino</span><select id="schedule-account" required></select></label>
+              <div class="account-picker-head"><span>Contas de destino</span><label class="select-all-label"><input id="schedule-select-all" type="checkbox" /> Selecionar todas</label></div>
+              <div id="schedule-accounts" class="schedule-accounts"></div>
               <div class="media-importer">
-                <div class="media-importer-head"><span>Importar mídia</span><small>Imagem ou vídeo, até 100 MB</small></div>
-                <label class="media-dropzone" for="schedule-file">
-                  <strong>＋ Escolher arquivo</strong>
-                  <span>ou arraste sua mídia para este espaço</span>
-                  <input id="schedule-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" />
-                </label>
-                <div id="media-upload-status" class="media-upload-status" role="status"></div>
+                <div class="media-importer-head"><span>Importar mídias</span><small>Arraste, escolha ou cole arquivos</small></div>
+                <label class="media-dropzone" for="schedule-file"><strong>Solte suas mídias aqui</strong><span>Imagens e vídeos · ordem da seleção</span><input id="schedule-file" type="file" accept="image/*,video/*" multiple /></label>
+                <div id="media-upload-status" class="media-upload-status"></div>
               </div>
-              <label class="media-field"><span>URL da mídia</span><input id="schedule-media" type="url" placeholder="A URL aparecerá após o upload..." required /><small>Você também pode colar uma URL de mídia.</small></label>
-              <div id="media-preview" class="media-preview"><span>Pré-visualização da mídia</span></div>
-              <label><span>Legenda</span><textarea id="schedule-caption" rows="5" placeholder="Escreva uma legenda para a publicação"></textarea></label>
-              <label><span>Data e horário</span><input id="schedule-date" type="datetime-local" required /></label>
+              <div id="media-items" class="media-items"></div>
+              <div class="caption-mode"><label><input name="caption-mode" type="radio" value="global" checked /> Legenda única</label><label><input name="caption-mode" type="radio" value="per_media" /> Uma por mídia</label></div>
+              <label id="global-caption-field"><span>Legenda global</span><textarea id="schedule-caption" rows="4" placeholder="Uma legenda para todas as mídias"></textarea></label>
+              <label><span>Intervalo entre publicações</span><input id="schedule-interval" type="number" min="1" value="1" /><small>Aplicado entre cada conta e cada mídia</small></label>
+              <label class="publish-now-label"><input id="schedule-now" type="checkbox" /> Publicar na hora</label>
+              <label id="schedule-date-field"><span>Primeiro horário</span><input id="schedule-date" type="datetime-local" required /><small id="minimum-time-hint"></small></label>
+              <label class="privacy-toggle"><input id="hide-previews" type="checkbox" /> Censurar pré-visualizações</label>
               <button class="primary-btn" type="submit">Adicionar à fila →</button>
             </form>
             <section class="glass-panel queue-panel">
@@ -239,6 +276,6 @@
       window.__INITIAL_METRICS__ = {{ initial_metrics | tojson }};
       window.__INITIAL_PAGE__ = 'dashboard';
     </script>
-    <script src="/static/app.js?v=20260917-5"></script>
+    <script src="/static/app.js?v=20260917-6"></script>
   </body>
 </html>

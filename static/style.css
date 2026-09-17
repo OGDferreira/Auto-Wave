@@ -174,6 +174,64 @@ textarea {
   animation: content-in 0.55s ease both;
 }
 
+.topbar {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 42px;
+  margin: -12px 0 10px;
+}
+
+.user-menu { position: relative; }
+.user-menu-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(17, 17, 17, 0.86);
+  color: var(--text);
+  cursor: pointer;
+}
+.user-avatar,
+.account-mini-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), #3348b8);
+  color: #fff;
+  font-weight: 700;
+}
+.user-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  display: grid;
+  min-width: 190px;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: 12px;
+  background: #12121a;
+  box-shadow: 0 18px 35px rgba(0, 0, 0, 0.5);
+}
+.user-menu-panel button {
+  width: 100%;
+  margin: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
 .page {
   display: none;
 }
@@ -287,6 +345,13 @@ textarea {
 
 .stat-card strong {
   font-size: clamp(1.3rem, 2vw, 2rem);
+}
+
+.stat-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .content-grid {
@@ -629,6 +694,142 @@ button:disabled {
   padding: 11px 12px;
 }
 
+.account-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.select-all-label,
+.publish-now-label,
+.privacy-toggle {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+  color: var(--text) !important;
+  font-size: 0.8rem;
+}
+
+.select-all-label input,
+.publish-now-label input,
+.privacy-toggle input,
+.schedule-account-option input {
+  width: auto;
+  accent-color: var(--purple-strong);
+}
+
+.schedule-accounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.schedule-account-option {
+  display: flex !important;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text) !important;
+  font-size: 0.78rem;
+}
+
+.schedule-account-option strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-account-option .account-mini-avatar {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  font-size: 0.68rem;
+}
+
+.media-items {
+  display: grid;
+  gap: 8px;
+}
+
+.media-item {
+  display: grid;
+  grid-template-columns: 54px 1fr 28px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  cursor: grab;
+}
+
+.media-item-preview {
+  width: 54px;
+  height: 54px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #08090e;
+}
+
+.media-item-preview img,
+.media-item-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-item-preview.is-censored {
+  filter: blur(12px);
+}
+
+.media-item-info {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.media-item-info strong,
+.media-item-info small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-item-info small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.caption-input,
+.thumbnail-input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #08090e;
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
+.remove-media-button {
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 7px;
+  background: transparent;
+  color: #fca5a5;
+  cursor: pointer;
+}
+
 .media-field small {
   margin-top: 5px;
   color: var(--muted);
@@ -852,6 +1053,18 @@ button:disabled {
   font-size: 1.5rem;
 }
 
+.queue-thumb img,
+.queue-thumb video {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.queue-thumb.is-censored {
+  filter: blur(10px);
+}
+
 .queue-card-body {
   display: grid;
   gap: 3px;
@@ -904,6 +1117,14 @@ button:disabled {
 }
 
 @media (max-width: 960px) {
+  .topbar {
+    margin-top: 0;
+  }
+
+  .schedule-accounts {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell {
     flex-direction: column;
   }
