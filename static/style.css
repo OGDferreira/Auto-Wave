@@ -483,13 +483,16 @@ code {
 
 .accounts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+  gap: 10px;
 }
 
 .account-card {
-  padding: 18px;
-  border-left-width: 4px;
+  display: grid;
+  min-height: 92px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 2px;
   border-left-style: solid;
   overflow: hidden;
 }
@@ -504,6 +507,11 @@ code {
   box-shadow: 0 0 18px rgba(250, 204, 21, 0.12);
 }
 
+.account-card[data-status="pending"] {
+  border-left-color: var(--yellow);
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.12);
+}
+
 .account-card[data-status="suspensa"] {
   border-left-color: var(--red);
   box-shadow: 0 0 18px rgba(239, 68, 68, 0.14);
@@ -512,22 +520,22 @@ code {
 .account-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   justify-content: flex-start;
-  margin-bottom: 12px;
+  margin-bottom: 5px;
 }
 
 .account-avatar {
   display: grid;
-  flex: 0 0 46px;
+  flex: 0 0 34px;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 34px;
+  height: 34px;
   border: 1px solid rgba(168, 85, 247, 0.4);
   border-radius: 50%;
   background: linear-gradient(135deg, #2d1550, #111827);
   color: #e9d5ff;
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   font-weight: 800;
 }
 
@@ -539,7 +547,7 @@ code {
 
 .account-header h4 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 0.88rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -547,32 +555,79 @@ code {
 
 .account-status {
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.62rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   opacity: 0.9;
 }
 
 .account-card p {
-  margin: 8px 0;
+  margin: 3px 0;
   color: var(--muted);
 }
 
 .account-card .account-metrics {
   color: #ddd6fe;
-  font-size: 0.82rem;
+  font-size: 0.68rem;
 }
 
 .account-card button {
-  margin-top: 12px;
+  margin-top: 7px;
   width: 100%;
   border: 1px solid rgba(168, 85, 247, 0.6);
   background: transparent;
   color: var(--text);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 6px 8px;
+  font-size: 0.72rem;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.account-help {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  margin-left: auto;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: var(--yellow);
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: help;
+}
+
+.account-help::after {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 7px);
+  z-index: 4;
+  width: 190px;
+  padding: 7px 9px;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 7px;
+  background: #17121f;
+  color: var(--text);
+  content: attr(data-tooltip);
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.account-help:hover::after,
+.account-help:focus::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.account-card[data-status="suspensa"] .account-help {
+  color: var(--red);
 }
 
 .account-card button:hover {
@@ -672,8 +727,14 @@ button:disabled {
 .scheduler-layout,
 .logs-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) 1fr;
-  gap: 18px;
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  align-items: start;
+  gap: 22px;
+}
+
+.scheduler-form {
+  min-width: 0;
+  overflow: visible;
 }
 
 .scheduler-form label {
@@ -759,7 +820,7 @@ button:disabled {
 
 .media-item {
   display: grid;
-  grid-template-columns: 54px 1fr 28px;
+  grid-template-columns: 58px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 9px;
   padding: 8px;
@@ -792,6 +853,10 @@ button:disabled {
   display: grid;
   min-width: 0;
   gap: 3px;
+}
+
+.media-item-info input {
+  min-width: 0;
 }
 
 .media-item-info strong,
@@ -1021,7 +1086,8 @@ button:disabled {
 
 .queue-cards {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  min-width: 0;
 }
 
 .calendar-day-list {
@@ -1054,11 +1120,24 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
+  min-width: 0;
+  padding: 10px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.025);
   animation: page-in 0.3s ease both;
+}
+
+.queue-card[data-status="falhou"],
+.queue-card[data-status="falha"],
+.queue-card[data-status="failed"] {
+  border-color: rgba(239, 68, 68, 0.65);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.12);
+}
+
+.queue-card[data-status="pending"],
+.queue-card[data-status="agendado"] {
+  border-color: rgba(250, 204, 21, 0.42);
 }
 
 .queue-thumb {
@@ -1088,6 +1167,7 @@ button:disabled {
   display: grid;
   gap: 3px;
   flex: 1;
+  min-width: 0;
 }
 
 .queue-card-body span,

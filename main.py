@@ -158,10 +158,7 @@ class CollaboratorPayload(BaseModel):
 
 
 META_GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v21.0")
-META_REDIRECT_URI = os.getenv(
-    "META_REDIRECT_URI",
-    "https://auto-wave.onrender.com/auth/callback",
-)
+META_REDIRECT_URI = "https://auto-wave.onrender.com/auth/callback"
 META_SCOPES = [
     "instagram_business_basic",
     "instagram_business_content_publish",
@@ -617,7 +614,8 @@ async def meta_login(
     request: Request,
     db: AsyncSession = Depends(session_dependency),
 ):
-    config = await get_or_create_system_config(db)
+    user = await require_user(request, db)
+    config = await get_or_create_system_config(db, owner_id_for(user))
     if not config.meta_app_id:
         raise HTTPException(status_code=503, detail="Configure o Meta App ID antes do login.")
 
@@ -627,7 +625,12 @@ async def meta_login(
             account_id_value = int(account_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="ID de conta inválido.") from exc
-        account = await db.get(Account, account_id_value)
+        account = await db.scalar(
+            select(Account).where(
+                Account.id == account_id_value,
+                Account.owner_id == owner_id_for(user),
+            )
+        )
         if account is None:
             raise HTTPException(status_code=404, detail="Conta não encontrada.")
     state_payload = f"{secrets.token_urlsafe(24)}.{int(time.time())}.{account_id}"
@@ -669,7 +672,8 @@ async def meta_callback(
     if not code or not state:
         raise HTTPException(status_code=400, detail="Resposta OAuth sem code ou state.")
 
-    config = await get_or_create_system_config(db)
+    user = await require_user(request, db)
+    config = await get_or_create_system_config(db, owner_id_for(user))
     state_parts = state.rsplit(".", 3)
     if len(state_parts) != 4:
         raise HTTPException(status_code=400, detail="State OAuth inválido.")
@@ -679,7 +683,7 @@ async def meta_callback(
         state_payload.encode(),
         hashlib.sha256,
     ).hexdigest()
-    if not hmac.compare_digest(state_parts[2], expected_signature):
+    if not hmac.compare_digest(state_parts[3], expected_signature):
         raise HTTPException(status_code=400, detail="State OAuth inválido.")
 
     async with httpx.AsyncClient(timeout=20) as client:
@@ -703,7 +707,12 @@ async def meta_callback(
 
     account_id = state_parts[2]
     if account_id:
-        account = await db.get(Account, int(account_id))
+        account = await db.scalar(
+            select(Account).where(
+                Account.id == int(account_id),
+                Account.owner_id == owner_id_for(user),
+            )
+        )
         if account is not None:
             account.meta_access_token = access_token
             account.status = "conectada"
@@ -838,12 +847,17 @@ async def importar_contas(request: Request, db: AsyncSession = Depends(session_d
         )
         if existing.scalars().first() is not None:
             continue
-        account = Account(username=username, password=password, status="pendente", owner_id=owner_id)
+        account = Account(username=username, password=password, status="pending", owner_id=owner_id)
         account.password = password
         db.add(account)
         created += 1
 
-    await db.commit()
+    try:
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.exception("Failed to persist imported accounts")
+        raise HTTPException(status_code=503, detail="Não foi possível salvar as contas no banco de dados.") from exc
     return {"status": "ok", "created": created}
 
 

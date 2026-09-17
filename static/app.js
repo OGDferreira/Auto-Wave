@@ -329,6 +329,7 @@ function renderAccounts(accounts) {
     title.textContent = `@${String(account.username).replace(/^@/, '')}`;
     const status = document.createElement('span');
     status.className = 'account-status';
+    const isPending = account.status === 'pending' || account.status === 'pendente';
     status.textContent = account.status === 'conectada' ? 'Conectada' : account.status === 'suspensa' ? 'Suspensa' : 'Pendente';
     identity.append(title, status);
     header.appendChild(identity);
@@ -339,6 +340,17 @@ function renderAccounts(accounts) {
     const details = document.createElement('p');
     details.className = 'account-metrics';
     details.textContent = `${Number(account.views_count || 0).toLocaleString('pt-BR')} visualizações · ${Number(account.leads_count || 0).toLocaleString('pt-BR')} leads`;
+
+    if (account.status === 'suspensa' || isPending) {
+      const reason = document.createElement('span');
+      reason.className = 'account-help';
+      reason.textContent = '?';
+      reason.tabIndex = 0;
+      reason.dataset.tooltip = account.status === 'suspensa'
+        ? 'A conta está suspensa ou foi bloqueada pela plataforma.'
+        : 'A conta foi importada e aguarda conexão/autorização.';
+      header.appendChild(reason);
+    }
 
     const action = document.createElement('button');
     action.className = 'account-connect-btn';
@@ -427,7 +439,7 @@ function renderQueue(posts) {
         const thumb = post.media_type === 'VIDEO'
           ? `<video src="${post.thumbnail_url || post.media_url}" muted></video>`
           : `<img src="${post.thumbnail_url || post.media_url}" alt="Miniatura da publicação" />`;
-        return `<article class="queue-card"><div class="queue-thumb ${hidePreviews?.checked ? 'is-censored' : ''}">${thumb}</div><div class="queue-card-body"><strong>${account?.username || `Conta #${post.account_id}`}</strong><span>${date.toLocaleString('pt-BR')}</span><small>${post.caption || 'Sem legenda'}</small></div><span class="status-chip">${post.status}</span><button class="queue-delete" data-post-id="${post.id}" type="button">×</button></article>`;
+        return `<article class="queue-card" data-status="${post.status}"><div class="queue-thumb ${hidePreviews?.checked ? 'is-censored' : ''}">${thumb}</div><div class="queue-card-body"><strong>${account?.username || `Conta #${post.account_id}`}</strong><span>${date.toLocaleString('pt-BR')}</span><small>${post.caption || 'Sem legenda'}</small></div><span class="status-chip">${post.status}</span><button class="queue-delete" data-post-id="${post.id}" type="button">×</button></article>`;
       }).join('');
       queueList.querySelectorAll('.queue-delete').forEach((button) => {
         button.addEventListener('click', async () => {
@@ -586,7 +598,7 @@ refreshAccountsButton?.addEventListener('click', async () => {
 });
 
 connectFirstAccountButton?.addEventListener('click', async () => {
-  const pending = accountsCache.filter((account) => account.status === 'pendente');
+  const pending = accountsCache.filter((account) => account.status === 'pendente' || account.status === 'pending');
   if (!pending.length) {
     notify('Não há contas pendentes para conectar.', 'info');
     return;
