@@ -159,6 +159,8 @@ class CollaboratorPayload(BaseModel):
 
 META_GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v21.0")
 META_REDIRECT_URI = "https://auto-wave.onrender.com/auth/callback"
+INSTAGRAM_AUTHORIZE_URL = "https://www.instagram.com/oauth/authorize"
+INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 META_SCOPES = [
     "instagram_business_basic",
     "instagram_business_content_publish",
@@ -651,7 +653,7 @@ async def meta_login(
     )
     from fastapi.responses import RedirectResponse
 
-    return RedirectResponse(f"https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth?{query}")
+    return RedirectResponse(f"{INSTAGRAM_AUTHORIZE_URL}?{query}")
 
 
 @app.get("/auth/callback")
@@ -687,11 +689,12 @@ async def meta_callback(
         raise HTTPException(status_code=400, detail="State OAuth inválido.")
 
     async with httpx.AsyncClient(timeout=20) as client:
-        token_response = await client.get(
-            f"https://graph.facebook.com/{META_GRAPH_VERSION}/oauth/access_token",
-            params={
+        token_response = await client.post(
+            INSTAGRAM_TOKEN_URL,
+            data={
                 "client_id": config.meta_app_id,
                 "client_secret": config.meta_app_secret,
+                "grant_type": "authorization_code",
                 "redirect_uri": META_REDIRECT_URI,
                 "code": code,
             },
