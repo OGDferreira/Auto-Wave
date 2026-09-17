@@ -164,6 +164,8 @@ INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 META_SCOPES = [
     "instagram_business_basic",
     "instagram_business_content_publish",
+    "instagram_business_manage_messages",
+    "instagram_business_manage_comments",
     "instagram_business_manage_insights",
 ]
 RENDER_API_BASE_URL = os.getenv("RENDER_API_BASE_URL", "https://api.render.com/v1").rstrip("/")
@@ -708,6 +710,21 @@ async def meta_callback(
     if not access_token:
         raise HTTPException(status_code=502, detail="A Meta não retornou um access token.")
 
+    long_lived_response = await client.get(
+        f"https://graph.instagram.com/{META_GRAPH_VERSION}/access_token",
+        params={
+            "grant_type": "ig_exchange_token",
+            "client_secret": config.meta_app_secret,
+            "access_token": access_token,
+        },
+    )
+    if long_lived_response.is_error:
+        logger.error("Instagram long-lived token exchange failed: %s", long_lived_response.text)
+        raise HTTPException(status_code=502, detail="O Instagram recusou a renovação do token.")
+    long_lived_token = long_lived_response.json().get("access_token")
+    if not long_lived_token:
+        raise HTTPException(status_code=502, detail="O Instagram não retornou um token de longa duração.")
+
     account_id = state_parts[2]
     if account_id:
         account = await db.scalar(
@@ -717,7 +734,7 @@ async def meta_callback(
             )
         )
         if account is not None:
-            account.meta_access_token = access_token
+            account.meta_access_token = long_lived_token
             account.status = "conectada"
             await db.commit()
 
