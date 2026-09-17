@@ -55,10 +55,21 @@ templates = Jinja2Templates(directory="templates")
 
 @app.middleware("http")
 async def require_panel_login(request: Request, call_next):
-    if request.url.path.startswith("/api/") and request.url.path not in {"/api/auth/login", "/api/health/db"}:
+    protected_path = request.url.path.startswith("/api/") or request.url.path.startswith("/contas")
+    if protected_path and request.url.path not in {"/api/auth/login", "/api/health/db"}:
         async with AsyncSessionLocal() as db:
-            if await current_user(request, db) is None:
+            user = await current_user(request, db)
+            if user is None:
                 return JSONResponse({"detail": "Faça login para acessar o painel."}, status_code=401)
+            collaborator_paths = {
+                "/api/auth/me",
+                "/api/auth/logout",
+                "/api/contas",
+                "/api/push/subscribe",
+            }
+            is_account_route = request.url.path.startswith("/contas")
+            if not user.is_owner and request.url.path not in collaborator_paths and not is_account_route:
+                return JSONResponse({"detail": "Colaboradores têm acesso somente ao Hub de contas."}, status_code=403)
     return await call_next(request)
 
 
