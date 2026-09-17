@@ -598,6 +598,41 @@ button:disabled {
   padding: 11px 12px;
 }
 
+.media-field small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.media-preview {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px dashed rgba(168, 85, 247, 0.5);
+  border-radius: 14px;
+  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.12), rgba(8, 9, 14, 0.9));
+  color: var(--muted);
+  overflow: hidden;
+}
+
+.media-preview img {
+  width: 100%;
+  max-height: 190px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.media-preview-url {
+  max-width: 100%;
+  overflow: hidden;
+  color: #c4b5fd;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .queue-heading {
   display: flex;
   justify-content: space-between;

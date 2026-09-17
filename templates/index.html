@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#050505" />
     <title>Auto-Wave</title>
     <link rel="manifest" href="/static/manifest.json" />
-    <link rel="stylesheet" href="/static/style.css?v=20260917-3" />
+    <link rel="stylesheet" href="/static/style.css?v=20260917-4" />
   </head>
   <body>
     <div id="toast-region" class="toast-region" aria-live="polite"></div>
@@ -191,7 +191,8 @@
                 <h3>Postagem programada</h3>
               </div>
               <label><span>Conta de destino</span><select id="schedule-account" required></select></label>
-              <label><span>URL da mídia</span><input id="schedule-media" type="url" placeholder="https://..." required /></label>
+              <label class="media-field"><span>URL da mídia</span><input id="schedule-media" type="url" placeholder="Cole o link da imagem ou vídeo..." required /><small>Use uma URL pública para a mídia que será publicada.</small></label>
+              <div id="media-preview" class="media-preview"><span>Pré-visualização da mídia</span></div>
               <label><span>Legenda</span><textarea id="schedule-caption" rows="5" placeholder="Escreva uma legenda para a publicação"></textarea></label>
               <label><span>Data e horário</span><input id="schedule-date" type="datetime-local" required /></label>
               <button class="primary-btn" type="submit">Adicionar à fila →</button>
@@ -229,6 +230,6 @@
       window.__INITIAL_METRICS__ = {{ initial_metrics | tojson }};
       window.__INITIAL_PAGE__ = 'dashboard';
     </script>
-    <script src="/static/app.js?v=20260917-3"></script>
+    <script src="/static/app.js?v=20260917-4"></script>
   </body>
 </html>

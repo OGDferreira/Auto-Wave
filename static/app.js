@@ -11,6 +11,8 @@ const connectFirstAccountButton = document.getElementById('connect-first-account
 const toastRegion = document.getElementById('toast-region');
 const scheduleForm = document.getElementById('schedule-form');
 const scheduleAccount = document.getElementById('schedule-account');
+const scheduleMedia = document.getElementById('schedule-media');
+const mediaPreview = document.getElementById('media-preview');
 const queueList = document.getElementById('fila-list');
 const queueCount = document.getElementById('queue-count');
 const calendarStrip = document.getElementById('calendar-strip');
@@ -23,6 +25,27 @@ let accountPollingTimer;
 let logsPollingTimer;
 let queuePostsCache = [];
 let queueSelectedDay = null;
+
+scheduleMedia?.addEventListener('input', () => {
+  const value = scheduleMedia.value.trim();
+  if (!mediaPreview) return;
+  mediaPreview.replaceChildren();
+  if (!value) {
+    mediaPreview.textContent = 'Pré-visualização da mídia';
+    return;
+  }
+  const image = document.createElement('img');
+  image.src = value;
+  image.alt = 'Pré-visualização';
+  image.addEventListener('error', () => {
+    mediaPreview.replaceChildren();
+    mediaPreview.textContent = 'Link informado. A pré-visualização não está disponível.';
+  }, { once: true });
+  const url = document.createElement('span');
+  url.className = 'media-preview-url';
+  url.textContent = value;
+  mediaPreview.append(image, url);
+});
 
 function showPage(pageId) {
   const targetPage = document.getElementById(`page-${pageId}`);
@@ -228,7 +251,9 @@ async function loadAccounts() {
     notify('Não foi possível carregar as contas. Verifique o banco de dados.', 'error');
   }
 
-  function renderQueue(posts) {
+}
+
+function renderQueue(posts) {
     if (!queueList) return;
     queuePostsCache = posts;
     const filterValue = queueAccountFilter?.value || 'all';
@@ -282,19 +307,19 @@ async function loadAccounts() {
       console.error('Erro ao carregar fila', error);
     }
 
-  }
+}
 
-  queueAccountFilter?.addEventListener('change', () => {
+queueAccountFilter?.addEventListener('change', () => {
     queueSelectedDay = null;
     renderQueue(queuePostsCache);
-  });
-  queueAllButton?.addEventListener('click', () => {
+});
+queueAllButton?.addEventListener('click', () => {
     queueAccountFilter.value = 'all';
     queueSelectedDay = null;
     renderQueue(queuePostsCache);
-  });
+});
 
-  scheduleForm?.addEventListener('submit', async (event) => {
+scheduleForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
       await fetchJson('/api/fila/agendar', {
@@ -312,8 +337,7 @@ async function loadAccounts() {
     } catch (error) {
       notify('Preencha conta, mídia e horário corretamente.', 'error');
     }
-  });
-}
+});
 
 function startAccountPolling() {
   window.clearInterval(accountPollingTimer);
@@ -502,7 +526,7 @@ async function bootPanel() {
       return;
     }
     if (!authResponse.ok) {
-      throw new Error(`Falha ao validar a sessão (HTTP ${authResponse.status}).`);
+      throw new Error(`Falha ao validar a sessão (HTTP ${authResponse.status}). Tente atualizar novamente.`);
     }
     const user = await authResponse.json();
     if (user.role === 'collaborator') {

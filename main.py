@@ -396,7 +396,11 @@ async def logout(response: Response):
 
 @app.get("/api/auth/me")
 async def auth_me(request: Request, db: AsyncSession = Depends(session_dependency)):
-    user = await current_user(request, db)
+    try:
+        user = await current_user(request, db)
+    except SQLAlchemyError as exc:
+        logger.exception("Could not validate authenticated session")
+        raise HTTPException(status_code=503, detail="Banco indisponível ao validar sua sessão.") from exc
     if user is None:
         raise HTTPException(status_code=401, detail="Faça login.")
     return {"username": user.username, "role": "owner" if user.is_owner else "collaborator"}
