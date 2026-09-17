@@ -73,6 +73,9 @@ META_SCOPES = [
     "instagram_business_content_publish",
     "instagram_business_manage_insights",
 ]
+RENDER_API_BASE_URL = os.getenv("RENDER_API_BASE_URL", "https://api.render.com/v1").rstrip("/")
+RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID", "").strip()
+RENDER_API_KEY = os.getenv("RENDER_API_KEY", "").strip()
 
 
 def serialize_config(config: SystemConfig) -> dict[str, str]:
@@ -584,6 +587,51 @@ async def webhook_sharkbot(request: Request, db: AsyncSession = Depends(session_
 @app.get("/api/metricas")
 async def metricas(db: AsyncSession = Depends(session_dependency)):
     return await get_dashboard_metrics(db)
+
+
+@app.get("/api/logs")
+async def render_logs():
+    if not RENDER_API_KEY or not RENDER_SERVICE_ID:
+        raise HTTPException(
+            status_code=503,
+            detail="Logs do Render não configurados. Defina RENDER_API_KEY e RENDER_SERVICE_ID.",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                f"{RENDER_API_BASE_URL}/logs",
+                headers={"Authorization": f"Bearer {RENDER_API_KEY}"},
+                params={"resource": RENDER_SERVICE_ID, "limit": 100},
+            )
+        if response.is_error:
+            logger.error("Render logs API returned HTTP %s", response.status_code)
+            raise HTTPException(
+                status_code=502,
+                detail=f"A API do Render recusou a consulta de logs (HTTP {response.status_code}).",
+            )
+
+        payload = response.json()
+        raw_logs = payload.get("logs", payload) if isinstance(payload, dict) else payload
+        if not isinstance(raw_logs, list):
+            raw_logs = []
+
+        logs = []
+        for item in raw_logs:
+            if isinstance(item, str):
+                logs.append(item)
+                continue
+            if isinstance(item, dict):
+                message = item.get("message") or item.get("text") or item.get("log") or json.dumps(item)
+                timestamp = item.get("timestamp") or item.get("time") or item.get("createdAt")
+                logs.append(f"[{timestamp}] {message}" if timestamp else str(message))
+
+        return {"logs": logs[-100:], "source": "render"}
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.exception("Could not retrieve logs from Render")
+        raise HTTPException(status_code=502, detail="Não foi possível consultar os logs do Render.") from exc
 
 
 @app.post("/api/push/subscribe")

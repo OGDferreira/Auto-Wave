@@ -15,6 +15,7 @@ const calendarStrip = document.getElementById('calendar-strip');
 const logOutput = document.getElementById('log-output');
 let accountsCache = [];
 let accountPollingTimer;
+let logsPollingTimer;
 
 function showPage(pageId) {
   const targetPage = document.getElementById(`page-${pageId}`);
@@ -110,6 +111,27 @@ async function loadMetrics() {
     updateMetrics(metrics);
   } catch (error) {
     console.error('Erro ao carregar métricas', error);
+  }
+
+  async function loadLogs() {
+    if (!logOutput) {
+      return;
+    }
+    try {
+      const payload = await fetchJson('/api/logs');
+      logOutput.textContent = payload.logs.length
+        ? payload.logs.join('\n')
+        : 'O Render não retornou registros recentes.';
+      logOutput.scrollTop = logOutput.scrollHeight;
+    } catch (error) {
+      logOutput.textContent = error.message || 'Não foi possível carregar os logs do Render.';
+    }
+  }
+
+  function startLogsPolling() {
+    window.clearInterval(logsPollingTimer);
+    loadLogs();
+    logsPollingTimer = window.setInterval(loadLogs, 5000);
   }
 }
 
@@ -399,4 +421,5 @@ loadMetrics();
 loadConfig();
 loadAccounts();
 loadQueue();
+startLogsPolling();
 registerServiceWorker();
