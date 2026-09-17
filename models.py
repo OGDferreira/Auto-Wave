@@ -3,7 +3,7 @@ import socket
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
-from sqlalchemy import Boolean, DateTime, Float, JSON, String, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, JSON, String, func, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -16,6 +16,7 @@ class SystemConfig(Base):
     __tablename__ = "system_config"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     meta_app_id: Mapped[str] = mapped_column(String(255), nullable=True, default="")
     meta_app_secret: Mapped[str] = mapped_column(String(255), nullable=True, default="")
     meta_webhook_verify_token: Mapped[str] = mapped_column(String(255), nullable=True, default="")
@@ -36,6 +37,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_owner: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -44,6 +46,7 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     meta_access_token: Mapped[str] = mapped_column(String(500), nullable=True, default="")
@@ -125,6 +128,18 @@ AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if DATABASE_URL.startswith("postgresql+asyncpg://"):
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id)"))
+            await conn.execute(text("ALTER TABLE system_config ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id)"))
+            await conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id)"))
+        else:
+            for table in ("users", "system_config", "accounts"):
+                columns = {
+                    row[1]
+                    for row in (await conn.exec_driver_sql(f"PRAGMA table_info({table})")).all()
+                }
+                if "owner_id" not in columns:
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN owner_id INTEGER"))
 
 
 def database_target() -> dict[str, str]:

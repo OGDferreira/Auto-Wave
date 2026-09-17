@@ -8,6 +8,7 @@ import secrets
 import time
 import base64
 import binascii
+from collections import deque
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
@@ -20,7 +21,7 @@ from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
@@ -38,6 +39,18 @@ from models import (
 )
 
 logger = logging.getLogger("auto_wave")
+recent_logs: deque[str] = deque(maxlen=200)
+
+
+class RecentLogHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        recent_logs.append(self.format(record))
+
+
+recent_handler = RecentLogHandler()
+recent_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s %(message)s"))
+logger.addHandler(recent_handler)
+logger.setLevel(logging.INFO)
 
 app = FastAPI(title="Auto-Wave", version="1.0.0")
 
@@ -56,7 +69,7 @@ templates = Jinja2Templates(directory="templates")
 @app.middleware("http")
 async def require_panel_login(request: Request, call_next):
     protected_path = request.url.path.startswith("/api/") or request.url.path.startswith("/contas")
-    if protected_path and request.url.path not in {"/api/auth/login", "/api/health/db"}:
+    if protected_path and request.url.path not in {"/api/auth/login", "/api/auth/register", "/api/health/db"}:
         async with AsyncSessionLocal() as db:
             user = await current_user(request, db)
             if user is None:
@@ -89,6 +102,11 @@ class SchedulePayload(BaseModel):
 
 
 class LoginPayload(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterPayload(BaseModel):
     username: str
     password: str
 
@@ -151,6 +169,17 @@ async def current_user(request: Request, db: AsyncSession) -> User | None:
     return user if user and user.active else None
 
 
+def owner_id_for(user: User) -> int:
+    return user.id if user.is_owner else int(user.owner_id or user.id)
+
+
+async def require_user(request: Request, db: AsyncSession) -> User:
+    user = await current_user(request, db)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Faça login para acessar o painel.")
+    return user
+
+
 def serialize_config(config: SystemConfig) -> dict[str, str]:
     return {
         "meta_app_id": config.meta_app_id or "",
@@ -161,8 +190,11 @@ def serialize_config(config: SystemConfig) -> dict[str, str]:
     }
 
 
-async def get_or_create_system_config(db: AsyncSession) -> SystemConfig:
-    result = await db.execute(select(SystemConfig).order_by(SystemConfig.id.asc()))
+async def get_or_create_system_config(db: AsyncSession, owner_id: int | None = None) -> SystemConfig:
+    query = select(SystemConfig).order_by(SystemConfig.id.asc())
+    if owner_id is not None:
+        query = query.where(SystemConfig.owner_id == owner_id)
+    result = await db.execute(query)
     config = result.scalars().first()
     if config is None:
         config = SystemConfig(
@@ -171,6 +203,7 @@ async def get_or_create_system_config(db: AsyncSession) -> SystemConfig:
             meta_webhook_verify_token="",
             vapid_public_key="",
             vapid_private_key="",
+            owner_id=owner_id,
         )
         db.add(config)
         await db.commit()
@@ -214,8 +247,11 @@ async def get_dashboard_metrics(db: AsyncSession) -> dict[str, Any]:
     }
 
 
-async def get_all_accounts(db: AsyncSession):
-    result = await db.execute(select(Account).order_by(Account.created_at.desc()))
+async def get_all_accounts(db: AsyncSession, owner_id: int | None = None):
+    query = select(Account).order_by(Account.created_at.desc())
+    if owner_id is not None:
+        query = query.where(Account.owner_id == owner_id)
+    result = await db.execute(query)
     return result.scalars().all()
 
 
@@ -278,14 +314,6 @@ async def run_playwright_login(account_id: int) -> None:
 async def startup_event() -> None:
     try:
         await init_db()
-        async with AsyncSessionLocal() as db:
-            owner_username = os.getenv("ADMIN_USERNAME", "").strip()
-            owner_password = os.getenv("ADMIN_PASSWORD", "")
-            if owner_username and owner_password:
-                existing = await db.scalar(select(User).where(User.username == owner_username))
-                if existing is None:
-                    db.add(User(username=owner_username, password_hash=password_hash(owner_password), is_owner=True))
-                    await db.commit()
         logger.info("Database initialized successfully")
     except Exception:
         logger.exception("Database initialization failed; application started without database access")
@@ -296,9 +324,34 @@ async def login_page():
     return HTMLResponse(
         """<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1">
         <title>Entrar · Auto-Wave</title><style>body{margin:0;background:#050505;color:#f5f5f5;font:16px Segoe UI;display:grid;place-items:center;min-height:100vh}form{width:min(360px,calc(100% - 40px));padding:28px;background:#111;border:1px solid #35205a;border-radius:18px;box-shadow:0 0 30px #8b5cf633}h1{margin-top:0}input,button{width:100%;padding:13px;margin:8px 0;border-radius:10px;border:1px solid #444;background:#080808;color:#fff;box-sizing:border-box}button{background:#8b5cf6;border:0;font-weight:700;cursor:pointer}#error{color:#f87171;min-height:22px}</style>
-        <form id="login"><h1>Auto-Wave</h1><p>Acesse seu painel</p><input name="username" placeholder="Usuário" autocomplete="username" required><input name="password" type="password" placeholder="Senha" autocomplete="current-password" required><button>Entrar</button><div id="error"></div></form>
+        <form id="login"><h1>Auto-Wave</h1><p>Acesse seu painel</p><input name="username" placeholder="Usuário" autocomplete="username" required><input name="password" type="password" placeholder="Senha" autocomplete="current-password" required><button>Entrar</button><p><a href="/cadastro" style="color:#c4b5fd">Criar uma conta</a></p><div id="error"></div></form>
         <script>document.querySelector('#login').onsubmit=async e=>{e.preventDefault();let f=new FormData(e.target),r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:f.get('username'),password:f.get('password')})});if(r.ok)location.href='/';else document.querySelector('#error').textContent=(await r.json()).detail||'Falha ao entrar'};</script></html>"""
     )
+
+
+@app.get("/cadastro", response_class=HTMLResponse)
+async def register_page():
+    return HTMLResponse(
+        """<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Criar conta · Auto-Wave</title><style>body{margin:0;background:#050505;color:#f5f5f5;font:16px Segoe UI;display:grid;place-items:center;min-height:100vh}form{width:min(360px,calc(100% - 40px));padding:28px;background:#111;border:1px solid #35205a;border-radius:18px;box-shadow:0 0 30px #8b5cf633}h1{margin-top:0}input,button{width:100%;padding:13px;margin:8px 0;border-radius:10px;border:1px solid #444;background:#080808;color:#fff;box-sizing:border-box}button{background:#8b5cf6;border:0;font-weight:700;cursor:pointer}#error{color:#f87171;min-height:22px}</style>
+        <form id="register"><h1>Criar conta</h1><p>Sua conta será a proprietária do seu workspace.</p><input name="username" placeholder="Usuário" autocomplete="username" required minlength="3"><input name="password" type="password" placeholder="Senha (mínimo 8 caracteres)" autocomplete="new-password" required minlength="8"><button>Cadastrar e entrar</button><p><a href="/login" style="color:#c4b5fd">Já tenho uma conta</a></p><div id="error"></div></form>
+        <script>document.querySelector('#register').onsubmit=async e=>{e.preventDefault();let f=new FormData(e.target),r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:f.get('username'),password:f.get('password')})});if(r.ok)location.href='/';else document.querySelector('#error').textContent=(await r.json()).detail||'Falha no cadastro'};</script></html>"""
+    )
+
+
+@app.post("/api/auth/register")
+async def register(payload: RegisterPayload, response: Response, db: AsyncSession = Depends(session_dependency)):
+    username = payload.username.strip()
+    if len(username) < 3 or len(payload.password) < 8:
+        raise HTTPException(status_code=422, detail="Usuário deve ter pelo menos 3 caracteres e senha pelo menos 8.")
+    if await db.scalar(select(User).where(User.username == username)):
+        raise HTTPException(status_code=409, detail="Esse usuário já existe.")
+    user = User(username=username, password_hash=password_hash(payload.password), is_owner=True)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    response.set_cookie("auto_wave_session", auth_cookie(user.id), httponly=True, secure=True, samesite="lax", max_age=86400 * 7)
+    return {"status": "ok", "role": "owner"}
 
 
 @app.post("/api/auth/login")
@@ -334,7 +387,7 @@ async def create_collaborator(payload: CollaboratorPayload, request: Request, db
         raise HTTPException(status_code=422, detail="Usuário deve ter 3 caracteres e senha pelo menos 8.")
     if await db.scalar(select(User).where(User.username == username)):
         raise HTTPException(status_code=409, detail="Esse usuário já existe.")
-    db.add(User(username=username, password_hash=password_hash(payload.password), is_owner=False))
+    db.add(User(username=username, password_hash=password_hash(payload.password), is_owner=False, owner_id=owner.id))
     await db.commit()
     return {"status": "ok", "username": username}
 
@@ -368,8 +421,9 @@ async def home(request: Request):
 
 
 @app.get("/api/config")
-async def get_config(db: AsyncSession = Depends(session_dependency)):
-    config = await get_or_create_system_config(db)
+async def get_config(request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await require_user(request, db)
+    config = await get_or_create_system_config(db, owner_id_for(user))
     return {
         "meta_app_id": config.meta_app_id,
         "meta_app_secret": config.meta_app_secret,
@@ -399,9 +453,10 @@ async def database_health():
 
 
 @app.post("/api/config")
-async def post_config(payload: ConfigPayload, db: AsyncSession = Depends(session_dependency)):
+async def post_config(payload: ConfigPayload, request: Request, db: AsyncSession = Depends(session_dependency)):
     try:
-        config = await get_or_create_system_config(db)
+        user = await require_user(request, db)
+        config = await get_or_create_system_config(db, owner_id_for(user))
         config.meta_app_id = payload.meta_app_id.strip()
         config.meta_app_secret = payload.meta_app_secret.strip()
         config.meta_webhook_verify_token = payload.meta_webhook_verify_token.strip()
@@ -592,8 +647,9 @@ async def terms_of_service():
 
 
 @app.get("/api/contas")
-async def list_accounts(db: AsyncSession = Depends(session_dependency)):
-    accounts = await get_all_accounts(db)
+async def list_accounts(request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await require_user(request, db)
+    accounts = await get_all_accounts(db, owner_id_for(user))
     return [
         {
             "id": account.id,
@@ -610,6 +666,8 @@ async def list_accounts(db: AsyncSession = Depends(session_dependency)):
 
 @app.post("/contas/importar")
 async def importar_contas(request: Request, db: AsyncSession = Depends(session_dependency)):
+    user = await require_user(request, db)
+    owner_id = owner_id_for(user)
     try:
         content_type = request.headers.get("content-type", "")
         if "application/json" in content_type:
@@ -638,10 +696,13 @@ async def importar_contas(request: Request, db: AsyncSession = Depends(session_d
         username, password = [part.strip() for part in line.split(";", 1)]
         if not username:
             continue
-        existing = await db.execute(select(Account).where(Account.username == username))
+        existing = await db.execute(
+            select(Account).where(Account.username == username, Account.owner_id == owner_id)
+        )
         if existing.scalars().first() is not None:
             continue
-        account = Account(username=username, password=password, status="pendente")
+        account = Account(username=username, password=password, status="pendente", owner_id=owner_id)
+        account.password = password
         db.add(account)
         created += 1
 
@@ -739,11 +800,20 @@ async def metricas(db: AsyncSession = Depends(session_dependency)):
 
 @app.get("/api/logs")
 async def render_logs():
+    database_error = None
+    try:
+        async with engine.connect() as connection:
+            await connection.run_sync(lambda sync_connection: sync_connection.exec_driver_sql("SELECT 1"))
+    except Exception as exc:
+        database_error = f"Banco de dados: {type(exc).__name__}: {exc}"
+        logger.exception("Database connection failed while loading logs")
+
     if not RENDER_API_KEY or not RENDER_SERVICE_ID:
-        raise HTTPException(
-            status_code=503,
-            detail="Logs do Render não configurados. Defina RENDER_API_KEY e RENDER_SERVICE_ID.",
-        )
+        messages = list(recent_logs)
+        if database_error:
+            messages.append(database_error)
+        messages.append("Logs do Render não configurados. Defina RENDER_API_KEY e RENDER_SERVICE_ID.")
+        return {"logs": messages[-100:], "source": "application"}
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -774,7 +844,10 @@ async def render_logs():
                 timestamp = item.get("timestamp") or item.get("time") or item.get("createdAt")
                 logs.append(f"[{timestamp}] {message}" if timestamp else str(message))
 
-        return {"logs": logs[-100:], "source": "render"}
+        combined_logs = list(recent_logs) + logs
+        if database_error:
+            combined_logs.append(database_error)
+        return {"logs": combined_logs[-100:], "source": "render"}
     except HTTPException:
         raise
     except (httpx.HTTPError, ValueError) as exc:
