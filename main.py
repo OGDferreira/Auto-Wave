@@ -1,11 +1,16 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
 import time
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlencode
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -55,6 +60,28 @@ class SchedulePayload(BaseModel):
     media_url: str
     caption: str = ""
     scheduled_for: datetime
+
+
+META_GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v21.0")
+META_REDIRECT_URI = os.getenv(
+    "META_REDIRECT_URI",
+    "https://auto-wave.onrender.com/auth/callback",
+)
+META_SCOPES = [
+    "instagram_business_basic",
+    "instagram_business_content_publish",
+    "instagram_business_manage_insights",
+]
+
+
+def serialize_config(config: SystemConfig) -> dict[str, str]:
+    return {
+        "meta_app_id": config.meta_app_id or "",
+        "meta_app_secret": config.meta_app_secret or "",
+        "meta_webhook_verify_token": config.meta_webhook_verify_token or "",
+        "vapid_public_key": config.vapid_public_key or "",
+        "vapid_private_key": config.vapid_private_key or "",
+    }
 
 
 async def get_or_create_system_config(db: AsyncSession) -> SystemConfig:
@@ -221,15 +248,188 @@ async def get_config(db: AsyncSession = Depends(session_dependency)):
 
 @app.post("/api/config")
 async def post_config(payload: ConfigPayload, db: AsyncSession = Depends(session_dependency)):
+    try:
+        config = await get_or_create_system_config(db)
+        config.meta_app_id = payload.meta_app_id.strip()
+        config.meta_app_secret = payload.meta_app_secret.strip()
+        config.meta_webhook_verify_token = payload.meta_webhook_verify_token.strip()
+        config.vapid_public_key = payload.vapid_public_key.strip()
+        config.vapid_private_key = payload.vapid_private_key.strip()
+        await db.commit()
+        await db.refresh(config)
+        return {"status": "ok", "config": serialize_config(config)}
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Could not save system configuration")
+        raise HTTPException(
+            status_code=503,
+            detail="Não foi possível salvar as chaves no banco de dados.",
+        ) from exc
+
+
+@app.get("/auth/login")
+@app.get("/auth/meta/login")
+async def meta_login(
+    request: Request,
+    db: AsyncSession = Depends(session_dependency),
+):
     config = await get_or_create_system_config(db)
-    config.meta_app_id = payload.meta_app_id.strip()
-    config.meta_app_secret = payload.meta_app_secret.strip()
-    config.meta_webhook_verify_token = payload.meta_webhook_verify_token.strip()
-    config.vapid_public_key = payload.vapid_public_key.strip()
-    config.vapid_private_key = payload.vapid_private_key.strip()
-    await db.commit()
-    await db.refresh(config)
-    return {"status": "ok", "config": await get_config(db)}
+    if not config.meta_app_id:
+        raise HTTPException(status_code=503, detail="Configure o Meta App ID antes do login.")
+
+    account_id = request.query_params.get("account_id", "")
+    if account_id:
+        try:
+            account_id_value = int(account_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="ID de conta inválido.") from exc
+        account = await db.get(Account, account_id_value)
+        if account is None:
+            raise HTTPException(status_code=404, detail="Conta não encontrada.")
+    state_payload = f"{secrets.token_urlsafe(24)}.{int(time.time())}.{account_id}"
+    state_signature = hmac.new(
+        (config.meta_app_secret or "").encode(),
+        state_payload.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    state = f"{state_payload}.{state_signature}"
+    query = urlencode(
+        {
+            "client_id": config.meta_app_id,
+            "redirect_uri": META_REDIRECT_URI,
+            "state": state,
+            "response_type": "code",
+            "scope": ",".join(META_SCOPES),
+        }
+    )
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(f"https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth?{query}")
+
+
+@app.get("/auth/callback")
+@app.get("/auth/meta/callback")
+async def meta_callback(
+    request: Request,
+    db: AsyncSession = Depends(session_dependency),
+):
+    error = request.query_params.get("error")
+    if error:
+        raise HTTPException(
+            status_code=400,
+            detail=request.query_params.get("error_description") or error,
+        )
+
+    code = request.query_params.get("code")
+    state = request.query_params.get("state", "")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Resposta OAuth sem code ou state.")
+
+    config = await get_or_create_system_config(db)
+    state_parts = state.rsplit(".", 3)
+    if len(state_parts) != 4:
+        raise HTTPException(status_code=400, detail="State OAuth inválido.")
+    state_payload = ".".join(state_parts[:3])
+    expected_signature = hmac.new(
+        (config.meta_app_secret or "").encode(),
+        state_payload.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(state_parts[2], expected_signature):
+        raise HTTPException(status_code=400, detail="State OAuth inválido.")
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        token_response = await client.get(
+            f"https://graph.facebook.com/{META_GRAPH_VERSION}/oauth/access_token",
+            params={
+                "client_id": config.meta_app_id,
+                "client_secret": config.meta_app_secret,
+                "redirect_uri": META_REDIRECT_URI,
+                "code": code,
+            },
+        )
+    if token_response.is_error:
+        logger.error("Meta OAuth token exchange failed: %s", token_response.text)
+        raise HTTPException(status_code=502, detail="A Meta recusou o código OAuth.")
+
+    token_data = token_response.json()
+    access_token = token_data.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=502, detail="A Meta não retornou um access token.")
+
+    account_id = state_parts[2]
+    if account_id:
+        account = await db.get(Account, int(account_id))
+        if account is not None:
+            account.meta_access_token = access_token
+            account.status = "conectada"
+            await db.commit()
+
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse("/#contas?connected=1")
+
+
+@app.get("/webhook/meta")
+async def verify_meta_webhook(request: Request, db: AsyncSession = Depends(session_dependency)):
+    config = await get_or_create_system_config(db)
+    params = request.query_params
+    if (
+        params.get("hub.mode") == "subscribe"
+        and hmac.compare_digest(
+            params.get("hub.verify_token", ""),
+            config.meta_webhook_verify_token or "",
+        )
+    ):
+        return JSONResponse(content=int(params.get("hub.challenge", "0")))
+    raise HTTPException(status_code=403, detail="Token de verificação inválido.")
+
+
+@app.post("/webhook/meta")
+async def receive_meta_webhook(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"status": "ignored", "message": "payload inválido"}, status_code=200)
+    logger.info("Meta webhook received: %s", json.dumps(payload, ensure_ascii=False))
+    return JSONResponse({"status": "ok"}, status_code=200)
+
+
+@app.api_route("/deletar-dados", methods=["GET", "POST"])
+async def delete_data(request: Request):
+    payload = {}
+    if request.method == "POST":
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+    logger.info("Data deletion request received: %s", payload)
+    return JSONResponse(
+        {
+            "status": "received",
+            "message": "Solicitação de exclusão recebida. O usuário será contatado para confirmação.",
+        }
+    )
+
+
+@app.get("/privacidade")
+async def privacy_policy():
+    return JSONResponse(
+        {
+            "title": "Política de Privacidade - Auto-Wave",
+            "message": "Esta página descreve o tratamento de dados da plataforma Auto-Wave.",
+        }
+    )
+
+
+@app.get("/termos")
+async def terms_of_service():
+    return JSONResponse(
+        {
+            "title": "Termos de Serviço - Auto-Wave",
+            "message": "O uso do Auto-Wave depende da aceitação dos termos aplicáveis.",
+        }
+    )
 
 
 @app.get("/api/contas")

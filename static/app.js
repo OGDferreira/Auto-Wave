@@ -91,7 +91,14 @@ async function fetchJson(url, options = {}) {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || `Request failed: ${response.status}`);
+    let message = body || `Request failed: ${response.status}`;
+    try {
+      const parsed = JSON.parse(body);
+      message = parsed.detail || parsed.message || message;
+    } catch (error) {
+      // Keep the original response when the server did not return JSON.
+    }
+    throw new Error(message);
   }
 
   return response.json();
@@ -161,24 +168,9 @@ function renderAccounts(accounts) {
     const action = document.createElement('button');
     action.className = 'account-connect-btn';
     action.type = 'button';
-    action.textContent = account.status === 'conectada' ? 'Reconectar conta' : 'Conectar via Playwright';
+    action.textContent = account.status === 'conectada' ? 'Reconectar via Meta' : 'Conectar via Meta';
     action.addEventListener('click', async () => {
-      action.disabled = true;
-      action.classList.add('is-loading');
-      action.textContent = 'Conectando…';
-      try {
-        await fetchJson(`/contas/${account.id}/conectar`, {
-          method: 'POST',
-        });
-        notify(`Conexão de ${account.username} iniciada em background.`, 'success');
-        startAccountPolling();
-      } catch (error) {
-        notify('Não foi possível iniciar a conexão.', 'error');
-      } finally {
-        action.disabled = false;
-        action.classList.remove('is-loading');
-        action.textContent = account.status === 'conectada' ? 'Reconectar conta' : 'Conectar via Playwright';
-      }
+      window.location.href = `/auth/meta/login?account_id=${encodeURIComponent(account.id)}`;
     });
 
     card.appendChild(header);
@@ -282,10 +274,10 @@ configForm?.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify(body),
     });
-    alert('Configuração salva com sucesso');
+    notify('Configuração salva com sucesso.', 'success');
   } catch (error) {
     console.error(error);
-    alert('Erro ao salvar as chaves');
+    notify(error.message || 'Erro ao salvar as chaves.', 'error');
   }
 });
 
